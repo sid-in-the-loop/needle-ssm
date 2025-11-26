@@ -96,6 +96,8 @@ class S4Layer(Module):
         lambda_delta = self.Lambda * delta
         a_bar = ops.exp(lambda_delta)
         ones = init.ones_like(self.Lambda, requires_grad=False)
+
+        # TODO(sid-in-the-loop): I think instead of divide, you meant to multiply by inverse of matrix?
         b_bar = ops.divide(a_bar - ones, self.Lambda) * self.B
         return (
             a_bar.reshape((1, 1, self.state_size)),
@@ -121,6 +123,9 @@ class S4Layer(Module):
 
         outputs = []
         inputs = ops.split(u, 1)
+
+        # TODO(sid-in-the-loop): The reason SSM is faster is because this entire for loop can be rewritten
+        # as a single convolution operation using scan-like operations. Otherwise, its basically no faster than a RNN.
         for inp in inputs:
             inp = inp.reshape((batch, channels, 1))
             inp_state = ops.broadcast_to(inp, state.shape)
