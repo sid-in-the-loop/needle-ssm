@@ -50,3 +50,6 @@ np.save(data_dir / 'test_s4_model.npy', model_out.numpy())
 print('Saved test_s4_model.npy')
 print('Done!')
 
+
+
+
