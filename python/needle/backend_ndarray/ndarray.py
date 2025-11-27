@@ -509,6 +509,30 @@ class NDArray:
         self.device.ewise_tanh(self.compact()._handle, out._handle)
         return out
 
+    ### Scan (prefix sum) operation
+    def scan(self, axis=0):
+        """
+        Compute inclusive prefix sum (scan) along specified axis.
+        Returns array where out[i] = sum of input[0] to input[i] along axis.
+        """
+        if axis is None:
+            # Flatten and scan
+            flat = self.compact().reshape((self.size,))
+            out = NDArray.make((self.size,), device=self.device)
+            self.device.scan(flat._handle, out._handle)
+            return out.reshape(self.shape)
+        else:
+            # Scan along specified axis
+            # For now, implement 1D scan - can be extended for multi-dim
+            if self.ndim == 1:
+                out = NDArray.make(self.shape, device=self.device)
+                self.device.scan(self.compact()._handle, out._handle)
+                return out
+            else:
+                # For multi-dim, we'll need to handle axis properly
+                # For simplicity, flatten along axis and scan
+                raise NotImplementedError("Multi-dimensional scan not yet implemented")
+
     ### Matrix multiplication
     def __matmul__(self, other):
         """Matrix multplication of two arrays.  This requires that both arrays

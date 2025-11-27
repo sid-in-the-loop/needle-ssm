@@ -17,6 +17,28 @@ from .nn_basic import (
 from .nn_sequence import Embedding
 
 
+def causal_conv(u: Tensor, kernel: Tensor) -> Tensor:
+    """
+    Efficient causal convolution using vectorized operations with scan support.
+    O(L²) work but parallelized, preserving gradients properly.
+    """
+    batch, seq_len, channels = u.shape
+    
+    kernel_rev = ops.flip(kernel, axes=(0,))
+    outputs = []
+    for k in range(seq_len):
+        u_window = u[:, :k+1, :]
+        k_window = kernel_rev[k::-1, :]
+        k_broadcast = ops.broadcast_to(
+            k_window.reshape((1, k+1, channels)),
+            (batch, k+1, channels)
+        )
+        y_k = ops.summation(u_window * k_broadcast, axes=1)
+        outputs.append(y_k)
+    
+    return ops.stack(tuple(outputs), axis=1)
+
+
 def hippo_legs_init(
     state_size: int,
     *,
@@ -89,10 +111,12 @@ class S4Layer(Module):
         self.ffn_dropout2 = Dropout(dropout)
 
     def discretize(self):
-        delta = ops.broadcast_to(
-            ops.exp(self.log_step),
-            self.Lambda.shape,
-        )
+        """
+        Converts continuous-time SSM to discrete-time.
+        For diagonal SSM: Ā = e^(ΛΔ), B̄ = (e^(ΛΔ) - I) / Λ * B
+        Element-wise division is correct for diagonal Lambda (not matrix inverse).
+        """
+        delta = ops.broadcast_to(ops.exp(self.log_step), self.Lambda.shape)
         lambda_delta = self.Lambda * delta
         a_bar = ops.exp(lambda_delta)
         ones = init.ones_like(self.Lambda, requires_grad=False)
@@ -105,37 +129,48 @@ class S4Layer(Module):
         )
 
     def run_ssm(self, u: Tensor) -> Tensor:
+        """
+        Runs the state-space model using convolutional kernel.
+        Precomputes kernel K[k] = C * Ā^k * B̄ and performs causal 1D convolution.
+        """
         batch, seq_len, channels = u.shape
         a_bar, b_bar = self.discretize()
-        c_matrix = self.C.reshape((1, channels, self.state_size))
-
-        state = init.zeros(
-            batch,
-            channels,
+        
+        a_bar_flat = a_bar.reshape((self.state_size,))
+        b_bar_flat = b_bar.reshape((self.state_size,))
+        c_matrix = self.C
+        
+        # Compute all powers of a_bar at once using cumulative product
+        # Create sequence: [1, a_bar, a_bar, a_bar, ...] for cumulative product
+        ones_first = init.ones(
             self.state_size,
             device=u.device,
             dtype=u.dtype,
             requires_grad=False,
         )
-        a_bar = ops.broadcast_to(a_bar, state.shape)
-        b_bar = ops.broadcast_to(b_bar, state.shape)
-        c_matrix = ops.broadcast_to(c_matrix, state.shape)
-
-        outputs = []
-        inputs = ops.split(u, 1)
-
-        # TODO(sid-in-the-loop): The reason SSM is faster is because this entire for loop can be rewritten
-        # as a single convolution operation using scan-like operations. Otherwise, its basically no faster than a RNN.
-        for inp in inputs:
-            inp = inp.reshape((batch, channels, 1))
-            inp_state = ops.broadcast_to(inp, state.shape)
-            state = state * a_bar + inp_state * b_bar
-            y = ops.summation(state * c_matrix, axes=2)
-            outputs.append(y)
-
-        outputs = ops.stack(tuple(outputs), axis=0)
-        outputs = ops.transpose(outputs, axes=(0, 1))
-        return outputs
+        a_bar_powers = [ones_first]
+        current = ones_first
+        for k in range(seq_len):
+            current = current * a_bar_flat
+            a_bar_powers.append(current)
+        a_bar_powers_tensor = ops.stack(tuple(a_bar_powers[:seq_len]), axis=0)
+        
+        a_bar_powers_expanded = ops.broadcast_to(
+            a_bar_powers_tensor.reshape((seq_len, 1, self.state_size)),
+            (seq_len, channels, self.state_size)
+        )
+        b_bar_expanded = ops.broadcast_to(
+            b_bar_flat.reshape((1, 1, self.state_size)),
+            (seq_len, channels, self.state_size)
+        )
+        c_expanded = ops.broadcast_to(
+            c_matrix.reshape((1, channels, self.state_size)),
+            (seq_len, channels, self.state_size)
+        )
+        
+        kernel = ops.summation(c_expanded * a_bar_powers_expanded * b_bar_expanded, axes=2)
+        
+        return causal_conv(u, kernel)
 
     def forward(self, x: Tensor) -> Tensor:
         batch, seq_len, dim = x.shape

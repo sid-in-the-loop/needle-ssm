@@ -355,7 +355,7 @@ CUDA_nvToolsExt_LIBRARY:FILEPATH=CUDA_nvToolsExt_LIBRARY-NOTFOUND
 CUDA_rt_LIBRARY:FILEPATH=/usr/lib64/librt.a
 
 //Path to a program.
-PYTHON_EXECUTABLE:FILEPATH=/home/ssmurali/needle-ssm/venv/bin/python
+PYTHON_EXECUTABLE:FILEPATH=/home/ssmurali/miniconda3/envs/ssm/bin/python
 
 //Dependencies for the target
 ndarray_backend_cuda_LIB_DEPENDS:STATIC=general;/usr/local/cuda/lib64/libcudart_static.a;general;dl;general;/usr/lib64/librt.a;general;/usr/local/cuda/lib64/libcudart.so;
@@ -370,7 +370,7 @@ needle_IS_TOP_LEVEL:STATIC=ON
 needle_SOURCE_DIR:STATIC=/home/ssmurali/needle-ssm
 
 //The directory containing a CMake configuration file for pybind11.
-pybind11_DIR:PATH=/home/ssmurali/needle-ssm/venv/lib/python3.13/site-packages/pybind11/share/cmake/pybind11
+pybind11_DIR:PATH=/home/ssmurali/miniconda3/envs/ssm/lib/python3.14/site-packages/pybind11/share/cmake/pybind11
 
 
 ########################
@@ -542,7 +542,7 @@ CUDA_CUDA_LIBRARY-ADVANCED:INTERNAL=1
 //ADVANCED property for variable: CUDA_GENERATED_OUTPUT_DIR
 CUDA_GENERATED_OUTPUT_DIR-ADVANCED:INTERNAL=1
 //Returned GPU architectures from detect_gpus tool
-CUDA_GPU_DETECT_OUTPUT:INTERNAL=8.9
+CUDA_GPU_DETECT_OUTPUT:INTERNAL=8.6
 //ADVANCED property for variable: CUDA_HOST_COMPILATION_CPP
 CUDA_HOST_COMPILATION_CPP-ADVANCED:INTERNAL=1
 //ADVANCED property for variable: CUDA_NVCC_EXECUTABLE
@@ -627,41 +627,41 @@ CUDA_run_nvcc:INTERNAL=/usr/share/cmake/Modules/FindCUDA/run_nvcc.cmake
 //Details about finding CUDA
 FIND_PACKAGE_MESSAGE_DETAILS_CUDA:INTERNAL=[/usr/local/cuda][/usr/local/cuda/bin/nvcc][/usr/local/cuda/include][/usr/local/cuda/lib64/libcudart_static.a][v12.9()]
 //Details about finding Python
-FIND_PACKAGE_MESSAGE_DETAILS_Python:INTERNAL=[/home/ssmurali/needle-ssm/venv/bin/python][/home/ssmurali/miniconda3/include/python3.13][/home/ssmurali/miniconda3/lib/libpython3.13.so][cfound components: Development Interpreter Development.Module Development.Embed ][v3.13.5()]
+FIND_PACKAGE_MESSAGE_DETAILS_Python:INTERNAL=[/home/ssmurali/miniconda3/envs/ssm/bin/python][/home/ssmurali/miniconda3/envs/ssm/include/python3.14][/home/ssmurali/miniconda3/envs/ssm/lib/libpython3.14.so][cfound components: Development Interpreter Development.Module Development.Embed ][v3.14.0()]
 //Details about finding Threads
 FIND_PACKAGE_MESSAGE_DETAILS_Threads:INTERNAL=[TRUE][v()]
 //Test HAS_FLTO_AUTO
 HAS_FLTO_AUTO:INTERNAL=1
 //Python executable during the last CMake run
-PYBIND11_PYTHON_EXECUTABLE_LAST:INTERNAL=/home/ssmurali/needle-ssm/venv/bin/python
+PYBIND11_PYTHON_EXECUTABLE_LAST:INTERNAL=/home/ssmurali/miniconda3/envs/ssm/bin/python
 //Python debug status
 PYTHON_IS_DEBUG:INTERNAL=0
 PYTHON_MODULE_DEBUG_POSTFIX:INTERNAL=
-PYTHON_MODULE_EXTENSION:INTERNAL=.cpython-313-x86_64-linux-gnu.so
+PYTHON_MODULE_EXTENSION:INTERNAL=.cpython-314-x86_64-linux-gnu.so
 //linker supports push/pop state
 _CMAKE_LINKER_PUSHPOP_STATE_SUPPORTED:INTERNAL=TRUE
 _PYBIND11_CROSSCOMPILING:INTERNAL=OFF
 _Python:INTERNAL=Python
 //Compiler reason failure
 _Python_Compiler_REASON_FAILURE:INTERNAL=
-_Python_DEVELOPMENT_EMBED_SIGNATURE:INTERNAL=ad539d0117c3b9fec06b2b7d6ef07aa4
-_Python_DEVELOPMENT_MODULE_SIGNATURE:INTERNAL=24af8d97d5ea8a67322c0e67a2007f96
+_Python_DEVELOPMENT_EMBED_SIGNATURE:INTERNAL=8977d99efb41c7d2a32709c68665366f
+_Python_DEVELOPMENT_MODULE_SIGNATURE:INTERNAL=003a57e0bdf018c75526d14ed9d3f296
 //Development reason failure
 _Python_Development_REASON_FAILURE:INTERNAL=
-_Python_EXECUTABLE:INTERNAL=/home/ssmurali/needle-ssm/venv/bin/python
+_Python_EXECUTABLE:INTERNAL=/home/ssmurali/miniconda3/envs/ssm/bin/python
 //Path to a file.
-_Python_INCLUDE_DIR:INTERNAL=/home/ssmurali/miniconda3/include/python3.13
+_Python_INCLUDE_DIR:INTERNAL=/home/ssmurali/miniconda3/envs/ssm/include/python3.14
 //Python Properties
-_Python_INTERPRETER_PROPERTIES:INTERNAL=Python;3;13;5;64;;cpython-313-x86_64-linux-gnu;abi3;/home/ssmurali/miniconda3/lib/python3.13;/home/ssmurali/needle-ssm/venv/lib/python3.13;/home/ssmurali/needle-ssm/venv/lib/python3.13/site-packages;/home/ssmurali/needle-ssm/venv/lib/python3.13/site-packages
-_Python_INTERPRETER_SIGNATURE:INTERNAL=7c9deef03d8154baaf802f1648930f3e
+_Python_INTERPRETER_PROPERTIES:INTERNAL=Python;3;14;0;64;;cpython-314-x86_64-linux-gnu;abi3;/home/ssmurali/miniconda3/envs/ssm/lib/python3.14;/home/ssmurali/miniconda3/envs/ssm/lib/python3.14;/home/ssmurali/miniconda3/envs/ssm/lib/python3.14/site-packages;/home/ssmurali/miniconda3/envs/ssm/lib/python3.14/site-packages
+_Python_INTERPRETER_SIGNATURE:INTERNAL=f7ebcf4ae1cd1cbbd809607179833cf6
 //Path to a library.
-_Python_LIBRARY_RELEASE:INTERNAL=/home/ssmurali/miniconda3/lib/libpython3.13.so
+_Python_LIBRARY_RELEASE:INTERNAL=/home/ssmurali/miniconda3/envs/ssm/lib/libpython3.14.so
 //NumPy reason failure
 _Python_NumPy_REASON_FAILURE:INTERNAL=
 //Result of TRY_COMPILE
 compile_result:INTERNAL=TRUE
 //Directories where pybind11 and possibly Python headers are located
-pybind11_INCLUDE_DIRS:INTERNAL=/home/ssmurali/needle-ssm/venv/lib/python3.13/site-packages/pybind11/include;/home/ssmurali/miniconda3/include/python3.13
+pybind11_INCLUDE_DIRS:INTERNAL=/home/ssmurali/miniconda3/envs/ssm/lib/python3.14/site-packages/pybind11/include;/home/ssmurali/miniconda3/envs/ssm/include/python3.14
 //Result of try_run()
 run_result:INTERNAL=0
 

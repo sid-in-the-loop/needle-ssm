@@ -72,14 +72,14 @@ set(generated_file_internal "/home/ssmurali/needle-ssm/build/CMakeFiles/ndarray_
 set(generated_cubin_file_internal "/home/ssmurali/needle-ssm/build/CMakeFiles/ndarray_backend_cuda.dir/src/./ndarray_backend_cuda_generated_ndarray_backend_cuda.cu.o.cubin.txt") # path
 
 set(CUDA_NVCC_EXECUTABLE "/usr/local/cuda/bin/nvcc") # path
-set(CUDA_NVCC_FLAGS  ;; -gencode;arch=compute_89,code=sm_89) # list
+set(CUDA_NVCC_FLAGS  ;; -gencode;arch=compute_86,code=sm_86) # list
 # Build specific configuration flags
 set(CUDA_NVCC_FLAGS_DEBUG  ; )
 set(CUDA_NVCC_FLAGS_MINSIZEREL  ; )
 set(CUDA_NVCC_FLAGS_RELEASE  ; )
 set(CUDA_NVCC_FLAGS_RELWITHDEBINFO  ; )
 set(nvcc_flags -m64;--std;c++11;-Dndarray_backend_cuda_EXPORTS) # list
-set(CUDA_NVCC_INCLUDE_DIRS [==[/usr/local/cuda/include;/home/ssmurali/miniconda3/include/python3.13;/home/ssmurali/needle-ssm/venv/lib/python3.13/site-packages/pybind11/include;/home/ssmurali/miniconda3/include/python3.13;/usr/local/cuda/include]==]) # list (needs to be in lua quotes to address backslashes)
+set(CUDA_NVCC_INCLUDE_DIRS [==[/usr/local/cuda/include;/home/ssmurali/miniconda3/envs/ssm/include/python3.14;/home/ssmurali/miniconda3/envs/ssm/lib/python3.14/site-packages/pybind11/include;/home/ssmurali/miniconda3/envs/ssm/include/python3.14;/usr/local/cuda/include]==]) # list (needs to be in lua quotes to address backslashes)
 string(REPLACE "\\" "/" CUDA_NVCC_INCLUDE_DIRS "${CUDA_NVCC_INCLUDE_DIRS}")
 set(CUDA_NVCC_COMPILE_DEFINITIONS [==[]==]) # list (needs to be in lua quotes see #16510 ).
 set(format_flag "-c") # string

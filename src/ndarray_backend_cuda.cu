@@ -749,6 +749,149 @@ void VanillaReduceSum(const CudaArray& a, CudaArray* out, size_t reduce_size) {
   ReduceSumKernel<<<dim.grid, dim.block>>>(a.ptr, out->ptr, reduce_size, out->size);
 }
 
+////////////////////////////////////////////////////////////////////////////////
+// Scan (Prefix Sum) operations
+////////////////////////////////////////////////////////////////////////////////
+
+// Blelloch parallel scan algorithm
+// Up-sweep phase: build binary tree
+__global__ void ScanUpSweepKernel(scalar_t* data, size_t n) {
+  size_t tid = blockIdx.x * blockDim.x + threadIdx.x;
+  size_t offset = 1;
+  
+  for (size_t d = n >> 1; d > 0; d >>= 1) {
+    __syncthreads();
+    if (tid < d) {
+      size_t ai = offset * (2 * tid + 1) - 1;
+      size_t bi = offset * (2 * tid + 2) - 1;
+      data[bi] += data[ai];
+    }
+    offset <<= 1;
+  }
+}
+
+// Down-sweep phase: traverse tree back down
+__global__ void ScanDownSweepKernel(scalar_t* data, size_t n) {
+  size_t tid = blockIdx.x * blockDim.x + threadIdx.x;
+  size_t offset = n;
+  
+  for (size_t d = 1; d < n; d <<= 1) {
+    offset >>= 1;
+    __syncthreads();
+    if (tid < d) {
+      size_t ai = offset * (2 * tid + 1) - 1;
+      size_t bi = offset * (2 * tid + 2) - 1;
+      scalar_t t = data[ai];
+      data[ai] = data[bi];
+      data[bi] += t;
+    }
+  }
+}
+
+// Simple sequential scan for small arrays or as fallback
+__global__ void ScanSequentialKernel(const scalar_t* a, scalar_t* out, size_t n) {
+  size_t tid = blockIdx.x * blockDim.x + threadIdx.x;
+  if (tid == 0) {
+    out[0] = a[0];
+    for (size_t i = 1; i < n; i++) {
+      out[i] = out[i-1] + a[i];
+    }
+  }
+}
+
+// Parallel scan using block-level scan for better performance
+__global__ void ScanBlockKernel(const scalar_t* a, scalar_t* out, size_t n) {
+  __shared__ scalar_t s_data[BASE_THREAD_NUM];
+  size_t tid = threadIdx.x;
+  size_t gid = blockIdx.x * blockDim.x + threadIdx.x;
+  
+  // Load data into shared memory
+  s_data[tid] = (gid < n) ? a[gid] : 0.0f;
+  __syncthreads();
+  
+  // Up-sweep phase within block
+  for (size_t s = 1; s < blockDim.x; s <<= 1) {
+    if (tid >= s) {
+      s_data[tid] += s_data[tid - s];
+    }
+    __syncthreads();
+  }
+  
+  // Store result
+  if (gid < n) {
+    out[gid] = s_data[tid];
+  }
+}
+
+// Add block prefix sums to each block
+__global__ void AddBlockPrefixKernel(scalar_t* out, const scalar_t* block_prefixes, size_t n, size_t block_size) {
+  size_t gid = blockIdx.x * blockDim.x + threadIdx.x;
+  if (gid < n) {
+    size_t block_id = gid / block_size;
+    if (block_id > 0) {
+      out[gid] += block_prefixes[block_id - 1];
+    }
+  }
+}
+
+void Scan(const CudaArray& a, CudaArray* out) {
+  /**
+   * Compute inclusive prefix sum (scan) of array a.
+   * out[i] = sum of a[0] to a[i]
+   * 
+   * Args:
+   *   a: input array
+   *   out: output array (must have same size as a)
+   */
+  size_t n = a.size;
+  
+  if (n == 0) return;
+  if (n == 1) {
+    cudaMemcpy(out->ptr, a.ptr, ELEM_SIZE, cudaMemcpyDeviceToDevice);
+    return;
+  }
+  
+  // For small arrays, use sequential scan
+  if (n <= BASE_THREAD_NUM) {
+    ScanSequentialKernel<<<1, 1>>>(a.ptr, out->ptr, n);
+    return;
+  }
+  
+  // For larger arrays, use block-level parallel scan
+  // Process in chunks of BASE_THREAD_NUM
+  size_t num_blocks = (n + BASE_THREAD_NUM - 1) / BASE_THREAD_NUM;
+  CudaDims dim;
+  dim.block = dim3(BASE_THREAD_NUM, 1, 1);
+  dim.grid = dim3(num_blocks, 1, 1);
+  
+  // Allocate temporary array for block sums
+  CudaArray block_sums(num_blocks);
+  CudaArray block_sums_scanned(num_blocks);
+  
+  // First, compute scan within each block
+  ScanBlockKernel<<<dim.grid, dim.block>>>(a.ptr, out->ptr, n);
+  
+  // Extract block sums (last element of each block)
+  for (size_t i = 0; i < num_blocks; i++) {
+    size_t last_idx = (i + 1) * BASE_THREAD_NUM - 1;
+    if (last_idx < n) {
+      cudaMemcpy(&block_sums.ptr[i], &out->ptr[last_idx], ELEM_SIZE, cudaMemcpyDeviceToDevice);
+    } else {
+      block_sums.ptr[i] = 0.0f;
+    }
+  }
+  
+  // Scan the block sums recursively
+  if (num_blocks > 1) {
+    Scan(block_sums, &block_sums_scanned);
+  } else {
+    cudaMemcpy(block_sums_scanned.ptr, block_sums.ptr, ELEM_SIZE, cudaMemcpyDeviceToDevice);
+  }
+  
+  // Add block prefix sums to each block
+  AddBlockPrefixKernel<<<dim.grid, dim.block>>>(out->ptr, block_sums_scanned.ptr, n, BASE_THREAD_NUM);
+}
+
 }  // namespace cuda
 }  // namespace needle
 
@@ -822,4 +965,5 @@ PYBIND11_MODULE(ndarray_backend_cuda, m) {
   m.def("vanilla_max", VanillaReduceMax);
   m.def("reduce_sum", ReduceSum);
   m.def("vanilla_sum", VanillaReduceSum);
+  m.def("scan", Scan);
 }

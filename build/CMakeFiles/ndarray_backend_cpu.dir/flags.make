@@ -4,7 +4,7 @@
 # compile CXX with /usr/bin/c++
 CXX_DEFINES = -Dndarray_backend_cpu_EXPORTS
 
-CXX_INCLUDES = -isystem /home/ssmurali/miniconda3/include/python3.13 -isystem /home/ssmurali/needle-ssm/venv/lib/python3.13/site-packages/pybind11/include -isystem /usr/local/cuda/include
+CXX_INCLUDES = -isystem /home/ssmurali/miniconda3/envs/ssm/include/python3.14 -isystem /home/ssmurali/miniconda3/envs/ssm/lib/python3.14/site-packages/pybind11/include -isystem /usr/local/cuda/include
 
 CXX_FLAGS = -std=c++11 -O2 -march=native  -fPIC -fvisibility=hidden
 

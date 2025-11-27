@@ -280,6 +280,32 @@ def summation(a, axes=None):
     return Summation(axes)(a)
 
 
+class Scan(TensorOp):
+    """
+    Compute inclusive prefix sum (scan) operation.
+    For 1D array: out[i] = sum of a[0] to a[i]
+    """
+    def __init__(self, axis=0):
+        self.axis = axis
+
+    def compute(self, a):
+        return a.scan(axis=self.axis)
+
+    def gradient(self, out_grad, node):
+        """
+        Gradient of scan: reverse scan of the gradient
+        """
+        # Reverse the gradient and scan it, then reverse again
+        from .ops_mathematic import flip
+        grad_reversed = flip(out_grad, axes=(self.axis,))
+        grad_scanned = grad_reversed.scan(axis=self.axis)
+        return flip(grad_scanned, axes=(self.axis,))
+
+
+def scan(a, axis=0):
+    return Scan(axis)(a)
+
+
 class MatMul(TensorOp):
     def compute(self, a, b):
         ### BEGIN YOUR SOLUTION

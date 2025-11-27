@@ -478,6 +478,22 @@ void ReduceSum(const AlignedArray& a, AlignedArray* out, size_t reduce_size) {
   /// END YOUR SOLUTION
 }
 
+void Scan(const AlignedArray& a, AlignedArray* out) {
+  /**
+   * Compute inclusive prefix sum (scan) of array a.
+   * out[i] = sum of a[0] to a[i]
+   * 
+   * Args:
+   *   a: input array
+   *   out: output array (must have same size as a)
+   */
+  if (a.size == 0) return;
+  out->ptr[0] = a.ptr[0];
+  for (size_t i = 1; i < a.size; i++) {
+    out->ptr[i] = out->ptr[i-1] + a.ptr[i];
+  }
+}
+
 }  // namespace cpu
 }  // namespace needle
 
@@ -539,4 +555,5 @@ PYBIND11_MODULE(ndarray_backend_cpu, m) {
 
   m.def("reduce_max", ReduceMax);
   m.def("reduce_sum", ReduceSum);
+  m.def("scan", Scan);
 }

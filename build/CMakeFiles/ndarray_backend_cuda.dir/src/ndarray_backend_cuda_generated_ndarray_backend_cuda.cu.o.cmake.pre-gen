@@ -72,7 +72,7 @@ set(generated_file_internal "/home/ssmurali/needle-ssm/build/CMakeFiles/ndarray_
 set(generated_cubin_file_internal "/home/ssmurali/needle-ssm/build/CMakeFiles/ndarray_backend_cuda.dir/src/./ndarray_backend_cuda_generated_ndarray_backend_cuda.cu.o.cubin.txt") # path
 
 set(CUDA_NVCC_EXECUTABLE "/usr/local/cuda/bin/nvcc") # path
-set(CUDA_NVCC_FLAGS  ;; -gencode;arch=compute_89,code=sm_89) # list
+set(CUDA_NVCC_FLAGS  ;; -gencode;arch=compute_86,code=sm_86) # list
 # Build specific configuration flags
 set(CUDA_NVCC_FLAGS_DEBUG  ; )
 set(CUDA_NVCC_FLAGS_MINSIZEREL  ; )
