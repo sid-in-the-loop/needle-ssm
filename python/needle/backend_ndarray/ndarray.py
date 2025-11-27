@@ -533,6 +533,26 @@ class NDArray:
                 # For simplicity, flatten along axis and scan
                 raise NotImplementedError("Multi-dimensional scan not yet implemented")
 
+    def causal_conv(self, kernel_rev, batch, seq_len, channels):
+        """
+        Parallel causal convolution.
+        Args:
+            kernel_rev: reversed kernel (seq_len, channels)
+            batch, seq_len, channels: dimensions
+        Returns:
+            output tensor (batch, seq_len, channels)
+        """
+        out = NDArray.make((batch, seq_len, channels), device=self.device)
+        self.device.causal_conv(
+            self.compact()._handle,
+            kernel_rev.compact()._handle,
+            out._handle,
+            batch,
+            seq_len,
+            channels
+        )
+        return out
+
     ### Matrix multiplication
     def __matmul__(self, other):
         """Matrix multplication of two arrays.  This requires that both arrays

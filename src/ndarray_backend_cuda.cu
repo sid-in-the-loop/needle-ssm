@@ -892,6 +892,64 @@ void Scan(const CudaArray& a, CudaArray* out) {
   AddBlockPrefixKernel<<<dim.grid, dim.block>>>(out->ptr, block_sums_scanned.ptr, n, BASE_THREAD_NUM);
 }
 
+////////////////////////////////////////////////////////////////////////////////
+// Causal Convolution operations
+////////////////////////////////////////////////////////////////////////////////
+
+__global__ void CausalConvKernel(
+    const scalar_t* u,           // (batch, seq_len, channels) - input
+    const scalar_t* kernel_rev,  // (seq_len, channels) - reversed kernel
+    scalar_t* out,                // (batch, seq_len, channels) - output
+    size_t batch,
+    size_t seq_len,
+    size_t channels
+) {
+    // Each thread computes one output element: out[b, k, c]
+    size_t tid = blockIdx.x * blockDim.x + threadIdx.x;
+    size_t total_outputs = batch * seq_len * channels;
+    
+    if (tid >= total_outputs) return;
+    
+    // Decompose tid into (b, k, c)
+    size_t b = tid / (seq_len * channels);
+    size_t k = (tid / channels) % seq_len;
+    size_t c = tid % channels;
+    
+    // Compute: y[b, k, c] = sum_{j=0}^k u[b, j, c] * kernel_rev[k-j, c]
+    scalar_t sum = 0.0f;
+    for (size_t j = 0; j <= k; j++) {
+        size_t u_idx = b * seq_len * channels + j * channels + c;
+        size_t k_idx = (k - j) * channels + c;
+        sum += u[u_idx] * kernel_rev[k_idx];
+    }
+    
+    out[tid] = sum;
+}
+
+void CausalConv(
+    const CudaArray& u,
+    const CudaArray& kernel_rev,
+    CudaArray* out,
+    size_t batch,
+    size_t seq_len,
+    size_t channels
+) {
+    /**
+     * Parallel causal convolution kernel.
+     * Computes all outputs simultaneously using GPU parallelism.
+     * 
+     * Args:
+     *   u: input tensor (batch, seq_len, channels)
+     *   kernel_rev: reversed kernel (seq_len, channels)
+     *   out: output tensor (batch, seq_len, channels)
+     */
+    size_t total_outputs = batch * seq_len * channels;
+    CudaDims dim = CudaOneDim(total_outputs);
+    CausalConvKernel<<<dim.grid, dim.block>>>(
+        u.ptr, kernel_rev.ptr, out->ptr, batch, seq_len, channels
+    );
+}
+
 }  // namespace cuda
 }  // namespace needle
 
@@ -966,4 +1024,5 @@ PYBIND11_MODULE(ndarray_backend_cuda, m) {
   m.def("reduce_sum", ReduceSum);
   m.def("vanilla_sum", VanillaReduceSum);
   m.def("scan", Scan);
+  m.def("causal_conv", CausalConv);
 }

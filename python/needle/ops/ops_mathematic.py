@@ -306,6 +306,36 @@ def scan(a, axis=0):
     return Scan(axis)(a)
 
 
+class CausalConv(TensorOp):
+    """
+    Parallel causal convolution operation.
+    Computes all outputs simultaneously using backend kernel.
+    """
+    def __init__(self, batch, seq_len, channels):
+        self.batch = batch
+        self.seq_len = seq_len
+        self.channels = channels
+
+    def compute(self, u, kernel_rev):
+        return u.causal_conv(kernel_rev, self.batch, self.seq_len, self.channels)
+
+    def gradient(self, out_grad, node):
+        # Gradient of causal convolution
+        u, kernel_rev = node.inputs[0], node.inputs[1]
+        from .ops_mathematic import flip
+        u_grad = CausalConv(self.batch, self.seq_len, self.channels)(
+            out_grad, flip(kernel_rev, axes=(0,))
+        )
+        kernel_grad = CausalConv(self.batch, self.seq_len, self.channels)(
+            flip(out_grad, axes=(1,)), flip(u, axes=(1,))
+        )
+        return u_grad, kernel_grad
+
+
+def causal_conv_backend(u, kernel_rev, batch, seq_len, channels):
+    return CausalConv(batch, seq_len, channels)(u, kernel_rev)
+
+
 class MatMul(TensorOp):
     def compute(self, a, b):
         ### BEGIN YOUR SOLUTION

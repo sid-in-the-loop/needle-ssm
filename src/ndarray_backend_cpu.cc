@@ -494,6 +494,34 @@ void Scan(const AlignedArray& a, AlignedArray* out) {
   }
 }
 
+void CausalConv(
+    const AlignedArray& u,
+    const AlignedArray& kernel_rev,
+    AlignedArray* out,
+    size_t batch,
+    size_t seq_len,
+    size_t channels
+) {
+  /**
+   * Parallel causal convolution (CPU version).
+   * Computes: y[b, k, c] = sum_{j=0}^k u[b, j, c] * kernel_rev[k-j, c]
+   */
+  for (size_t b = 0; b < batch; b++) {
+    for (size_t k = 0; k < seq_len; k++) {
+      for (size_t c = 0; c < channels; c++) {
+        scalar_t sum = 0.0f;
+        for (size_t j = 0; j <= k; j++) {
+          size_t u_idx = b * seq_len * channels + j * channels + c;
+          size_t k_idx = (k - j) * channels + c;
+          sum += u.ptr[u_idx] * kernel_rev.ptr[k_idx];
+        }
+        size_t out_idx = b * seq_len * channels + k * channels + c;
+        out->ptr[out_idx] = sum;
+      }
+    }
+  }
+}
+
 }  // namespace cpu
 }  // namespace needle
 
@@ -556,4 +584,5 @@ PYBIND11_MODULE(ndarray_backend_cpu, m) {
   m.def("reduce_max", ReduceMax);
   m.def("reduce_sum", ReduceSum);
   m.def("scan", Scan);
+  m.def("causal_conv", CausalConv);
 }
