@@ -185,11 +185,14 @@ class Reshape(TensorOp):
 
     def compute(self, a):
         ### BEGIN YOUR SOLUTION
-        return array_api.reshape(a, self.shape)
+        # print("forward reshape: ", a.shape, self.shape)
+
+        return array_api.reshape(a.compact(), self.shape)
         ### END YOUR SOLUTION
 
     def gradient(self, out_grad, node):
         ### BEGIN YOUR SOLUTION
+        # print(out_grad.shape, node.inputs[0].shape)
         return reshape(out_grad, node.inputs[0].shape)
         ### END YOUR SOLUTION
 
@@ -407,6 +410,37 @@ class Exp(TensorOp):
 
 def exp(a):
     return Exp()(a)
+
+
+
+# ---------- Maximum op (update) ----------
+class Maximum(TensorOp):
+    def compute(self, a, b):
+        return array_api.maximum(a, b)
+
+    def gradient(self, out_grad, node):
+        # node.inputs are Tensors; get their underlying NDArray values
+        a_t, b_t = node.inputs
+
+        # realize backend data (NDArray) for comparisons
+        a_arr = a_t.realize_cached_data()
+        b_arr = b_t.realize_cached_data()
+
+        # compute elementwise masks using NDArray operations (returns NDArray)
+        # NDArray.__gt__ / __lt__ already return numeric 0/1 arrays per your NDArray impl
+        mask_a_arr = a_arr > b_arr   # 1 where a > b, else 0
+        mask_b_arr = b_arr > a_arr   # 1 where b > a, else 0
+
+        # wrap masks back into Tensors on same device/dtype, requires_grad=False
+        mask_a = Tensor(mask_a_arr, device=out_grad.device, dtype=out_grad.dtype, requires_grad=False)
+        mask_b = Tensor(mask_b_arr, device=out_grad.device, dtype=out_grad.dtype, requires_grad=False)
+
+        # Multiply masks with out_grad to route gradients
+        return out_grad * mask_a, out_grad * mask_b
+
+
+def maximum(a, b):
+    return Maximum()(a, b)
 
 
 class ReLU(TensorOp):
