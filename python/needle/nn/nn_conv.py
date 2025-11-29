@@ -80,3 +80,71 @@ class ConvBN(Module):
 
     def forward(self, x: Tensor) -> Tensor:
         return self.relu(self.bn(self.conv(x)))
+
+
+class FastConv2d(Conv):
+    """
+    Convolution using Fast Fourier Transform.
+    Accepts inputs in NCHW format, outputs also in NCHW format
+    """
+
+    def __init__(self, in_channels, out_channels, kernel_size, stride=1, bias=True, device=None, dtype="float32"):
+        super().__init__(in_channels, out_channels, kernel_size, stride, bias, device, dtype)
+    
+    def forward(self, x: Tensor) -> Tensor:
+        # Get dimensions
+        batch_size, in_channels, in_height, in_width = x.shape # NCHW
+        _, _, _, out_channels = self.weight.shape # KH, KW, C_in, C_out
+
+        pad = self.kernel_size // 2
+        Ho = in_height - self.kernel_size + pad * 2 + 1
+        Wo = in_width - self.kernel_size + pad * 2 + 1
+
+        x = ops.pad(x, pad, pad)
+        Hp = in_height + pad * 2
+        Wp = in_width + pad * 2
+
+        # Linear convolution result size after padding    
+        P = Hp + self.kernel_size - 1
+        Q = Wp + self.kernel_size - 1
+
+        x = ops.fft(x, shape=(P, Q), device=x.device, dtype=x.dtype) 
+        xh, xw = x.shape[2], x.shape[3]
+        x = ops.reshape(x, (batch_size, 1, in_channels, xh, xw, 2))
+        x = ops.broadcast_to(x, (batch_size, out_channels, in_channels, xh, xw, 2))
+
+        kernel = self.weight
+        kernel = ops.transpose(ops.transpose(kernel, (0, 2)), (1, 3))  # KH, KW, C_in, C_out -> C_in, C_out, KH, KW
+        kernel = ops.transpose(kernel, (0, 1)) # C_in, C_out, KH, KW -> C_out, C_in, KH, KW
+
+        kernel = ops.flip(kernel, axes=(2, 3))  # Flip kernel for cross-correlation
+        kernel = ops.fft(kernel, shape=(P, Q), device=x.device, dtype=x.dtype)
+
+        kh, kw = kernel.shape[2], kernel.shape[3]
+        kernel = ops.reshape(kernel, (1, out_channels, in_channels, kh, kw, 2))
+        kernel = ops.broadcast_to(kernel, (batch_size, out_channels, in_channels, kh, kw, 2))
+
+        fft_out = ops.complex_multiply(x, kernel, device=x.device)        
+        
+        # Inverse FFT to get back to spatial domain
+        ifft_out = ops.ifft(fft_out, shape=(P, Q), device=x.device, dtype=x.dtype)
+
+        # Crop to get valid convolution output: (batch, in_h, in_w, out_c)
+        # For valid convolution, output size is (in_h - k_h + 1, in_w - k_w + 1)
+        # But we want same padding, so output should be same as input
+        crop_h = self.kernel_size - 1
+        crop_w = self.kernel_size - 1
+        out = ops.crop(ifft_out, crop_h, crop_w, shape=(Ho, Wo))  # N, C_out, Ho, Wo
+
+        # Add bias if present
+        if self.bias is not None:
+            out = out + ops.broadcast_to(
+                ops.reshape(self.bias, (1, self.out_channels, 1, 1)),
+                out.shape
+            )
+        
+        # Handle stride
+        if self.stride > 1:
+            out = ops.undilate(out, (2, 3), self.stride - 1)
+
+        return out
