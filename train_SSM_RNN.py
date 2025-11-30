@@ -403,7 +403,7 @@ if __name__ == "__main__":
 
     print("Training RNN classifier")
     rnn_model = RNNClassifierLM(vocab_size=args.vocab, embedding_size=args.emb, hidden_size=args.hidden, device=device)
-    # train_model(rnn_model, train_ds, val_ds, n_epochs=args.epochs, batch_size=args.batch, optimizer_cls=ndl.optim.Adam, device=device)
+    train_model(rnn_model, train_ds, val_ds, n_epochs=args.epochs, batch_size=args.batch, optimizer_cls=ndl.optim.Adam, device=device)
 
     print("Training S4 classifier")
     s4_model = S4Classifier(vocab_size=args.vocab, embedding_size=args.emb, s4_hidden=args.hidden, num_layers=1, device=device, seq_len=args.seq_len, batch_first=True)

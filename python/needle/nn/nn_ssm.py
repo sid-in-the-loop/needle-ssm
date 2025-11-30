@@ -19,22 +19,10 @@ from .nn_sequence import Embedding
 
 def causal_conv(u: Tensor, kernel: Tensor) -> Tensor:
     """
-    Parallel causal convolution using CUDA/CPU kernel.
-    All outputs computed simultaneously - truly parallel across timesteps.
+    Parallel causal convolution backed by the custom kernel.
     """
     batch, seq_len, channels = u.shape
-    kernel_rev = ops.flip(kernel, axes=(0,))  # (seq_len, channels)
-    
-    # Use backend kernel for true parallelism
-    # Reshape u to flat array for kernel: (batch * seq_len * channels,)
-    u_flat = u.reshape((batch * seq_len * channels,))
-    kernel_rev_flat = kernel_rev.reshape((seq_len * channels,))
-    
-    # Call backend causal convolution kernel
-    out_flat = ops.causal_conv_backend(u_flat, kernel_rev_flat, batch, seq_len, channels)
-    
-    # Reshape back: (batch, seq_len, channels)
-    return out_flat.reshape((batch, seq_len, channels))
+    return ops.causal_conv_backend(u, kernel, batch, seq_len, channels)
 
 
 def hippo_legs_init(
@@ -118,8 +106,6 @@ class S4Layer(Module):
         lambda_delta = self.Lambda * delta
         a_bar = ops.exp(lambda_delta)
         ones = init.ones_like(self.Lambda, requires_grad=False)
-
-        # TODO(sid-in-the-loop): I think instead of divide, you meant to multiply by inverse of matrix?
         b_bar = ops.divide(a_bar - ones, self.Lambda) * self.B
         return (
             a_bar.reshape((1, 1, self.state_size)),
@@ -128,48 +114,46 @@ class S4Layer(Module):
 
     def run_ssm(self, u: Tensor) -> Tensor:
         """
-        Runs the state-space model using convolutional kernel.
-        Precomputes kernel K[k] = C * Ā^k * B̄ and performs causal 1D convolution.
-        (TODO1 note: B̄ uses element-wise division because Λ is diagonal.
-         TODO2 note: causal convolution fully offloaded to backend kernel.)
+        Runs the state-space model using the parallel convolution kernel.
         """
-        batch, seq_len, channels = u.shape
+        _, seq_len, channels = u.shape
         a_bar, b_bar = self.discretize()
-        
+
         a_bar_flat = a_bar.reshape((self.state_size,))
         b_bar_flat = b_bar.reshape((self.state_size,))
         c_matrix = self.C
-        
-        # Compute all powers of a_bar at once using cumulative product
-        # Create sequence: [1, a_bar, a_bar, a_bar, ...] for cumulative product
-        ones_first = init.ones(
+
+        ones = init.ones(
             self.state_size,
             device=u.device,
             dtype=u.dtype,
             requires_grad=False,
         )
-        a_bar_powers = [ones_first]
-        current = ones_first
-        for k in range(seq_len):
+        a_powers = [ones]
+        current = ones
+        for _ in range(1, seq_len):
             current = current * a_bar_flat
-            a_bar_powers.append(current)
-        a_bar_powers_tensor = ops.stack(tuple(a_bar_powers[:seq_len]), axis=0)
-        
-        a_bar_powers_expanded = ops.broadcast_to(
-            a_bar_powers_tensor.reshape((seq_len, 1, self.state_size)),
-            (seq_len, channels, self.state_size)
+            a_powers.append(current)
+        a_powers_tensor = ops.stack(tuple(a_powers), axis=0)
+
+        a_powers_expanded = ops.broadcast_to(
+            a_powers_tensor.reshape((seq_len, 1, self.state_size)),
+            (seq_len, channels, self.state_size),
         )
-        b_bar_expanded = ops.broadcast_to(
+        b_expanded = ops.broadcast_to(
             b_bar_flat.reshape((1, 1, self.state_size)),
-            (seq_len, channels, self.state_size)
+            (seq_len, channels, self.state_size),
         )
         c_expanded = ops.broadcast_to(
             c_matrix.reshape((1, channels, self.state_size)),
-            (seq_len, channels, self.state_size)
+            (seq_len, channels, self.state_size),
         )
-        
-        kernel = ops.summation(c_expanded * a_bar_powers_expanded * b_bar_expanded, axes=2)
-        
+
+        kernel = ops.summation(
+            c_expanded * a_powers_expanded * b_expanded,
+            axes=2,
+        )
+
         return causal_conv(u, kernel)
 
     def forward(self, x: Tensor) -> Tensor:

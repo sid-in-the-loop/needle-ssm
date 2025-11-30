@@ -211,27 +211,22 @@ class BroadcastTo(TensorOp):
     def gradient(self, out_grad, node):
         
         input_shape = node.inputs[0].shape
-        input_dim = node.inputs[0].ndim - 1
-        
         output_shape = self.shape
-        output_dim = len(output_shape) - 1
 
-        ### BEGIN YOUR SOLUTION
-        # 用summation去做
         if input_shape == output_shape:
             return out_grad
 
-        summation_dims = []
-        while input_dim >= 0 and output_dim >= 0:
-            if (input_shape[input_dim] == 1 and output_shape[output_dim] > 1):
-                summation_dims.append(output_dim)
-            input_dim -= 1
-            output_dim -= 1
-        
-        if (output_dim >= 0):
-            summation_dims.extend(range(output_dim+1))
+        # align shapes from the right by padding leading ones
+        padded_input = (1,) * (len(output_shape) - len(input_shape)) + input_shape
 
-        return reshape(summation(out_grad, tuple(summation_dims)), input_shape)
+        summation_axes = []
+        for axis, (in_dim, out_dim) in enumerate(zip(padded_input, output_shape)):
+            if in_dim == 1 and out_dim > 1:
+                summation_axes.append(axis)
+
+        reduced = summation(out_grad, tuple(summation_axes)) if summation_axes else out_grad
+        reshaped = reshape(reduced, padded_input)
+        return reshape(reshaped, input_shape)
         ### END YOUR SOLUTION
 
 
@@ -332,6 +327,7 @@ class CausalConv(TensorOp):
         kernel_grad = CausalConv(self.batch, self.seq_len, self.channels)(
             flip(out_grad, axes=(1,)), flip(u, axes=(1,))
         )
+        kernel_grad = summation(kernel_grad, axes=(0,))
         return u_grad, kernel_grad
 
 
