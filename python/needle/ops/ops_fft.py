@@ -139,6 +139,7 @@ class Pad(TensorOp):
 
     def gradient(self, out_grad: Tensor, node: Tensor):
         return crop(out_grad, self.h_padding, self.w_padding)
+
 def pad(x: Tensor, h_padding: int, w_padding: int) -> Tensor:
     return Pad(h_padding, w_padding)(x)
 

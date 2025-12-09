@@ -33,15 +33,20 @@ Needle-SSM Full Test
 ============================================================
 collected 522 items / 510 deselected / 12 selected
 
-tests/hw4_extra/test_fft.py::test_nn_conv_timing[needle.backend_ndarray.ndarray_backend_cpu-128-16-32-7-1] Conv timing (s=128, cin=16, cout=32, k=7, stride=1): slow=3160.61ms fast=3995.19ms speedup=0.79x
+tests/hw4_extra/test_fft.py::test_nn_conv_timing[needle.backend_ndarray.ndarray_backend_cpu-128-16-32-7-1] 
+Conv timing (s=128, cin=16, cout=32, k=7, stride=1): slow=3160.61ms fast=3995.19ms speedup=0.79x
 PASSED
-tests/hw4_extra/test_fft.py::test_nn_conv_timing[needle.backend_ndarray.ndarray_backend_cpu-128-16-32-11-1] Conv timing (s=128, cin=16, cout=32, k=11, stride=1): slow=7658.58ms fast=4510.75ms speedup=1.70x
+tests/hw4_extra/test_fft.py::test_nn_conv_timing[needle.backend_ndarray.ndarray_backend_cpu-128-16-32-11-1] 
+Conv timing (s=128, cin=16, cout=32, k=11, stride=1): slow=7658.58ms fast=4510.75ms speedup=1.70x
 PASSED
-tests/hw4_extra/test_fft.py::test_nn_conv_timing[needle.backend_ndarray.ndarray_backend_cpu-128-16-32-15-1] Conv timing (s=128, cin=16, cout=32, k=15, stride=1): slow=14169.98ms fast=4941.05ms speedup=2.87x
+tests/hw4_extra/test_fft.py::test_nn_conv_timing[needle.backend_ndarray.ndarray_backend_cpu-128-16-32-15-1] 
+Conv timing (s=128, cin=16, cout=32, k=15, stride=1): slow=14169.98ms fast=4941.05ms speedup=2.87x
 PASSED
-tests/hw4_extra/test_fft.py::test_nn_conv_timing[needle.backend_ndarray.ndarray_backend_cpu-128-16-32-19-1] Conv timing (s=128, cin=16, cout=32, k=19, stride=1): slow=22695.52ms fast=5515.94ms speedup=4.11x
+tests/hw4_extra/test_fft.py::test_nn_conv_timing[needle.backend_ndarray.ndarray_backend_cpu-128-16-32-19-1] 
+Conv timing (s=128, cin=16, cout=32, k=19, stride=1): slow=22695.52ms fast=5515.94ms speedup=4.11x
 PASSED
-tests/hw4_extra/test_fft.py::test_nn_conv_timing[needle.backend_ndarray.ndarray_backend_cpu-128-16-32-31-1] Conv timing (s=128, cin=16, cout=32, k=31, stride=1): slow=60625.19ms fast=7229.39ms speedup=8.39x
+tests/hw4_extra/test_fft.py::test_nn_conv_timing[needle.backend_ndarray.ndarray_backend_cpu-128-16-32-31-1] 
+Conv timing (s=128, cin=16, cout=32, k=31, stride=1): slow=60625.19ms fast=7229.39ms speedup=8.39x
 PASSED
 tests/hw4_extra/test_fft.py::test_nn_conv_timing[needle.backend_ndarray.ndarray_backend_cuda-64-16-32-7-1] Conv timing (s=64, cin=16, cout=32, k=7, stride=1): slow=5.06ms fast=14549.73ms speedup=0.00x
 PASSED
@@ -51,5 +56,6 @@ tests/hw4_extra/test_fft.py::test_nn_conv_timing[needle.backend_ndarray.ndarray_
 PASSED
 tests/hw4_extra/test_fft.py::test_nn_conv_timing[needle.backend_ndarray.ndarray_backend_cuda-64-16-32-19-1] Conv timing (s=64, cin=16, cout=32, k=19, stride=1): slow=18.75ms fast=23631.55ms speedup=0.00x
 PASSED
+
 
 ================ 4 passed, 695 deselected in 155.93s (0:02:35) =================

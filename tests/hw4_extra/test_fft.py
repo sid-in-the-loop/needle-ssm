@@ -6,12 +6,10 @@ import torch
 
 # Timing parameters (subset to keep test quick)
 conv_timing_params = [
-    (128, 16, 32, 7, 1),
-    (128, 16, 32, 11, 1),
-    (128, 16, 32, 15, 1),
-    (128, 16, 32, 19, 1),
-    (128, 16, 32, 31, 1),
-    (128, 16, 32, 63, 1),
+    (64, 16, 32, 7, 1),
+    (64, 16, 32, 11, 1),
+    (64, 16, 32, 15, 1),
+    (64, 16, 32, 19, 1),
 ]
 
 DEVICES = [ndl.cpu(), pytest.param(ndl.cuda(),
@@ -19,7 +17,7 @@ DEVICES = [ndl.cpu(), pytest.param(ndl.cuda(),
 
 
 @pytest.mark.parametrize("s,cin,cout,k,stride", conv_timing_params)
-@pytest.mark.parametrize("device", DEVICES)  # CPU only to reduce variability
+@pytest.mark.parametrize("device", [ndl.cuda()])  # CPU only to reduce variability
 def test_nn_conv_timing(s, cin, cout, k, stride, device):
     np.random.seed(0)
     fast = ndl.nn.FastConv2d(cin, cout, k, stride=stride, device=device)

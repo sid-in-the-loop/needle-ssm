@@ -100,13 +100,10 @@ class FastConv2d(Conv):
         Ho = in_height - self.kernel_size + pad * 2 + 1
         Wo = in_width - self.kernel_size + pad * 2 + 1
 
-        x = ops.pad(x, pad, pad)
-        Hp = in_height + pad * 2
-        Wp = in_width + pad * 2
-
         # Linear convolution result size after padding    
-        P = Hp + self.kernel_size - 1
-        Q = Wp + self.kernel_size - 1
+        x = ops.pad(x, pad, pad)
+        P = in_height + pad * 2 + self.kernel_size - 1
+        Q = in_width + pad * 2 + self.kernel_size - 1
 
         x = ops.fft(x, shape=(P, Q), device=x.device, dtype=x.dtype) 
         xh, xw = x.shape[2], x.shape[3]
@@ -132,9 +129,7 @@ class FastConv2d(Conv):
         # Crop to get valid convolution output: (batch, in_h, in_w, out_c)
         # For valid convolution, output size is (in_h - k_h + 1, in_w - k_w + 1)
         # But we want same padding, so output should be same as input
-        crop_h = self.kernel_size - 1
-        crop_w = self.kernel_size - 1
-        out = ops.crop(ifft_out, crop_h, crop_w, shape=(Ho, Wo))  # N, C_out, Ho, Wo
+        out = ops.crop(ifft_out, self.kernel_size - 1, self.kernel_size - 1, shape=(Ho, Wo))  # N, C_out, Ho, Wo
 
         # Add bias if present
         if self.bias is not None:
