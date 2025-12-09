@@ -185,11 +185,14 @@ class Reshape(TensorOp):
 
     def compute(self, a):
         ### BEGIN YOUR SOLUTION
-        return array_api.reshape(a, self.shape)
+        # print("forward reshape: ", a.shape, self.shape)
+
+        return array_api.reshape(a.compact(), self.shape)
         ### END YOUR SOLUTION
 
     def gradient(self, out_grad, node):
         ### BEGIN YOUR SOLUTION
+        # print(out_grad.shape, node.inputs[0].shape)
         return reshape(out_grad, node.inputs[0].shape)
         ### END YOUR SOLUTION
 
@@ -208,27 +211,22 @@ class BroadcastTo(TensorOp):
     def gradient(self, out_grad, node):
         
         input_shape = node.inputs[0].shape
-        input_dim = node.inputs[0].ndim - 1
-        
         output_shape = self.shape
-        output_dim = len(output_shape) - 1
 
-        ### BEGIN YOUR SOLUTION
-        # 用summation去做
         if input_shape == output_shape:
             return out_grad
 
-        summation_dims = []
-        while input_dim >= 0 and output_dim >= 0:
-            if (input_shape[input_dim] == 1 and output_shape[output_dim] > 1):
-                summation_dims.append(output_dim)
-            input_dim -= 1
-            output_dim -= 1
-        
-        if (output_dim >= 0):
-            summation_dims.extend(range(output_dim+1))
+        # align shapes from the right by padding leading ones
+        padded_input = (1,) * (len(output_shape) - len(input_shape)) + input_shape
 
-        return reshape(summation(out_grad, tuple(summation_dims)), input_shape)
+        summation_axes = []
+        for axis, (in_dim, out_dim) in enumerate(zip(padded_input, output_shape)):
+            if in_dim == 1 and out_dim > 1:
+                summation_axes.append(axis)
+
+        reduced = summation(out_grad, tuple(summation_axes)) if summation_axes else out_grad
+        reshaped = reshape(reduced, padded_input)
+        return reshape(reshaped, input_shape)
         ### END YOUR SOLUTION
 
 
@@ -329,6 +327,7 @@ class CausalConv(TensorOp):
         kernel_grad = CausalConv(self.batch, self.seq_len, self.channels)(
             flip(out_grad, axes=(1,)), flip(u, axes=(1,))
         )
+        kernel_grad = summation(kernel_grad, axes=(0,))
         return u_grad, kernel_grad
 
 
@@ -407,6 +406,37 @@ class Exp(TensorOp):
 
 def exp(a):
     return Exp()(a)
+
+
+
+# ---------- Maximum op (update) ----------
+class Maximum(TensorOp):
+    def compute(self, a, b):
+        return array_api.maximum(a, b)
+
+    def gradient(self, out_grad, node):
+        # node.inputs are Tensors; get their underlying NDArray values
+        a_t, b_t = node.inputs
+
+        # realize backend data (NDArray) for comparisons
+        a_arr = a_t.realize_cached_data()
+        b_arr = b_t.realize_cached_data()
+
+        # compute elementwise masks using NDArray operations (returns NDArray)
+        # NDArray.__gt__ / __lt__ already return numeric 0/1 arrays per your NDArray impl
+        mask_a_arr = a_arr > b_arr   # 1 where a > b, else 0
+        mask_b_arr = b_arr > a_arr   # 1 where b > a, else 0
+
+        # wrap masks back into Tensors on same device/dtype, requires_grad=False
+        mask_a = Tensor(mask_a_arr, device=out_grad.device, dtype=out_grad.dtype, requires_grad=False)
+        mask_b = Tensor(mask_b_arr, device=out_grad.device, dtype=out_grad.dtype, requires_grad=False)
+
+        # Multiply masks with out_grad to route gradients
+        return out_grad * mask_a, out_grad * mask_b
+
+
+def maximum(a, b):
+    return Maximum()(a, b)
 
 
 class ReLU(TensorOp):

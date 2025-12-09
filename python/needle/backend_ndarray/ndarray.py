@@ -645,23 +645,50 @@ class NDArray:
         self.device.reduce_max(view.compact()._handle, out._handle, view.shape[-1])
         return out
 
-    def flip(self, axes):
+    # def flip(self, axes):
+    #     """
+    #     Flip this ndarray along the specified axes.
+    #     Note: compact() before returning.
+    #     """
+    #     ### BEGIN YOUR SOLUTION
+    #     new_strides = list(self.strides)
+    #     if isinstance(axes, int):
+    #         axes = [axes]
+    #     new_offset = 0
+    #     for i, a in enumerate(axes):
+    #         new_strides[a] = -new_strides[a]
+    #         new_offset += self.strides[a] * (self.shape[a] - 1)
+
+    #     return NDArray.make(self.shape, strides=tuple(new_strides), device=self.device, handle=self._handle, offset=new_offset).compact()
+    #     ### END YOUR SOLUTION
+
+    def flip(self, axes: tuple[int, ...]) -> "NDArray":
         """
         Flip this ndarray along the specified axes.
         Note: compact() before returning.
         """
-        ### BEGIN YOUR SOLUTION
-        new_strides = list(self.strides)
-        if isinstance(axes, int):
-            axes = [axes]
-        new_offset = 0
-        for i, a in enumerate(axes):
-            new_strides[a] = -new_strides[a]
-            new_offset += self.strides[a] * (self.shape[a] - 1)
+        if axes is None:
+            axes = tuple(range(self.ndim))
+        # normalize negative axes and ignore out-of-range ones
+        axes = tuple(a if a >= 0 else a + self.ndim for a in axes)
+        axes = tuple(a for a in axes if 0 <= a < self.ndim)
 
-        return NDArray.make(self.shape, strides=tuple(new_strides), device=self.device, handle=self._handle, offset=new_offset).compact()
-        ### END YOUR SOLUTION
+        new_strides = list(self._strides)
+        new_offset = self._offset
+        for ax in axes:
+            if self.shape[ax] > 1:
+                new_offset += (self.shape[ax] - 1) * new_strides[ax]
+                new_strides[ax] = -new_strides[ax]
 
+        out = NDArray.make(
+            shape=self.shape,
+            strides=tuple(new_strides),
+            device=self._device,
+            handle=self._handle,
+            offset=new_offset,
+        )
+        return out.compact()
+    
     def pad(self, axes):
         """
         Pad this ndarray by zeros by the specified amount in `axes`,

@@ -186,6 +186,34 @@ class RNN(Module):
         ### END YOUR SOLUTION
 
 
+class RNNClassifierLM(Module):
+    def __init__(self, vocab_size, embedding_size, hidden_size, num_layers=1, device=None, dtype="float32"):
+        """
+        RNN classifier for the sentinel detection task, using embedding layer like a language model.
+        """
+        super().__init__()
+        self.embedding = Embedding(vocab_size, embedding_size, device=device, dtype=dtype)
+        self.rnn = RNN(embedding_size, hidden_size, num_layers=num_layers, device=device, dtype=dtype)
+        self.linear = Linear(hidden_size, 1, device=device, dtype=dtype)  # output scalar logit
+
+    def forward(self, x, h=None):
+        """
+        x: (seq_len, batch_size) Tensor of token IDs
+        h: optional initial hidden state
+        Returns:
+            logits: (batch_size, 1)
+            h: final hidden state
+        """
+        seq_len, batch_size = x.shape
+        x_emb = self.embedding(x)  # (seq_len, batch, embedding_size)
+        rnn_out, h = self.rnn(x_emb, h)  # (seq_len, batch, hidden_size)
+        # Pool over time (mean) to get sequence representation
+        pooled = ops.summation(rnn_out, axes=0) / seq_len  # (batch, hidden_size)
+        logits = self.linear(pooled)  # (batch, 1)
+        return logits, h
+
+
+
 class LSTMCell(Module):
     def __init__(self, input_size, hidden_size, bias=True, device=None, dtype="float32"):
         super().__init__()

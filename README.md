@@ -59,11 +59,7 @@ From the repo root:
 
 ```bash
 cd needle-ssm
-
-# make sure python/ is on the path
 export PYTHONPATH=$PWD/python:$PYTHONPATH
-
-# run only the S4 / SSM tests
 python3 -m pytest -l -v tests/hw4_extra/test_ssm.py
 ```
 
