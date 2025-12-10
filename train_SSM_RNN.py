@@ -97,12 +97,12 @@ class RNNClassifierLM(nn.Module):
         return logits
 
 class S4Classifier(nn.Module):
-    def __init__(self, vocab_size, embedding_size, s4_hidden, num_layers=1, device=ndl.cpu(), dtype="float32", seq_len=2048, batch_first=True):
+    def __init__(self, vocab_size, embedding_size, s4_hidden, num_layers=1, device=ndl.cpu(), dtype="float32", seq_len=2048, batch_first=True, use_fft: bool = False):
         super().__init__()
         self.device = device
         self.batch_first = batch_first
         self.embedding = nn.Embedding(vocab_size, embedding_size, device=device, dtype=dtype)
-        self.s4 = S4_impl(embedding_size, s4_hidden, num_layers=num_layers, device=device, dtype=dtype, sequence_len=seq_len, batch_first=batch_first)
+        self.s4 = S4_impl(embedding_size, s4_hidden, num_layers=num_layers, device=device, dtype=dtype, sequence_len=seq_len, batch_first=batch_first, use_fft=use_fft)
         self.linear = nn.Linear(embedding_size, 1, device=device, dtype=dtype)
 
     def forward(self, x_seq):
@@ -161,7 +161,8 @@ def train_model(model, train_dataset, val_dataset, n_epochs=3, lr=1e-3, batch_si
 # -------------------------
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--seq_len", type=int, default=10)
+    parser.add_argument("--seq_lens", type=str, default="10,100,500",
+                        help="Comma-separated sequence lengths to sweep (e.g., 10,100,500)")
     parser.add_argument("--vocab", type=int, default=100)
     parser.add_argument("--train_size", type=int, default=5000)
     parser.add_argument("--val_size", type=int, default=1000)
@@ -171,17 +172,51 @@ if __name__ == "__main__":
     parser.add_argument("--emb", type=int, default=64)
     args = parser.parse_args()
 
-    train_ds = SentinelDataset(sequence_length=args.seq_len, dataset_size=args.train_size,
-                               vocab_size=args.vocab, sentinel_prob=0.5, fixed=False)
-    val_ds = SentinelDataset(sequence_length=args.seq_len, dataset_size=args.val_size,
-                             vocab_size=args.vocab, sentinel_prob=0.5, fixed=True, seed=1234)
-
     device = ndl.cuda() if ndl.cuda().enabled() else ndl.cpu()
+    seq_lens = [int(s) for s in args.seq_lens.split(",") if s.strip()]
 
-    print("Training RNN classifier")
-    rnn_model = RNNClassifierLM(vocab_size=args.vocab, embedding_size=args.emb, hidden_size=args.hidden, device=device)
-    train_model(rnn_model, train_ds, val_ds, n_epochs=args.epochs, batch_size=args.batch, optimizer_cls=ndl.optim.Adam, device=device)
+    for seq_len in seq_lens:
+        print(f"\n=== Seq Len {seq_len} ===")
+        train_ds = SentinelDataset(sequence_length=seq_len, dataset_size=args.train_size,
+                                   vocab_size=args.vocab, sentinel_prob=0.5, fixed=False)
+        val_ds = SentinelDataset(sequence_length=seq_len, dataset_size=args.val_size,
+                                 vocab_size=args.vocab, sentinel_prob=0.5, fixed=True, seed=1234)
 
-    print("Training S4 classifier")
-    s4_model = S4Classifier(vocab_size=args.vocab, embedding_size=args.emb, s4_hidden=args.hidden, num_layers=1, device=device, seq_len=args.seq_len, batch_first=True)
-    train_model(s4_model, train_ds, val_ds, n_epochs=args.epochs, batch_size=args.batch, optimizer_cls=ndl.optim.Adam, device=device)
+        # RNN
+        print("Training RNN classifier")
+        rnn_model = RNNClassifierLM(vocab_size=args.vocab, embedding_size=args.emb, hidden_size=args.hidden, device=device)
+        t0 = time.time()
+        train_model(rnn_model, train_ds, val_ds, n_epochs=args.epochs, batch_size=args.batch, optimizer_cls=ndl.optim.Adam, device=device)
+        print(f"RNN seq_len={seq_len} elapsed={time.time()-t0:.1f}s")
+
+        # S4 without FFT
+        print("Training S4 classifier (direct conv)")
+        s4_model_direct = S4Classifier(
+            vocab_size=args.vocab,
+            embedding_size=args.emb,
+            s4_hidden=args.hidden,
+            num_layers=1,
+            device=device,
+            seq_len=seq_len,
+            batch_first=True,
+            use_fft=False,
+        )
+        t0 = time.time()
+        train_model(s4_model_direct, train_ds, val_ds, n_epochs=args.epochs, batch_size=args.batch, optimizer_cls=ndl.optim.Adam, device=device)
+        print(f"S4 direct seq_len={seq_len} elapsed={time.time()-t0:.1f}s")
+
+        # S4 with FFT
+        print("Training S4 classifier (FFT)")
+        s4_model_fft = S4Classifier(
+            vocab_size=args.vocab,
+            embedding_size=args.emb,
+            s4_hidden=args.hidden,
+            num_layers=1,
+            device=device,
+            seq_len=seq_len,
+            batch_first=True,
+            use_fft=True,
+        )
+        t0 = time.time()
+        train_model(s4_model_fft, train_ds, val_ds, n_epochs=args.epochs, batch_size=args.batch, optimizer_cls=ndl.optim.Adam, device=device)
+        print(f"S4 FFT seq_len={seq_len} elapsed={time.time()-t0:.1f}s")
