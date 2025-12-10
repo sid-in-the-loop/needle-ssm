@@ -51,7 +51,7 @@ int32_t GetAndIncrementIndex(std::vector<int32_t> &indices, const std::vector<in
   }
   indices[n_dim - 1] += 1;
   
-  // 更新 indices 列表
+  // indices
   for(int k = n_dim - 1; k >= 0 ; k--) {
     if (indices[k] == shape[k]) {
       indices[k] = 0;
@@ -84,8 +84,6 @@ void Compact(const AlignedArray& a, AlignedArray* out, std::vector<int32_t> shap
   std::vector<int32_t> indices(n_dim, 0);
   
   for(size_t i = 0; i < out->size; i++) {
-    // 计算出 要赋值的元素在a中的下标位置
-    // 遍历 维护的indices 列表
     int32_t idx = GetAndIncrementIndex(indices, shape, strides, n_dim);
     out->ptr[i] = a.ptr[offset + idx]; 
   }
@@ -108,9 +106,7 @@ void EwiseSetitem(const AlignedArray& a, AlignedArray* out, std::vector<int32_t>
   size_t n_dim = shape.size();
   std::vector<int32_t> indices(n_dim, 0);
 
-  // 已经提前在python 层做了size的断言 assert prod(view.shape) == prod(other.shape)
   for(int i = 0; i < a.size; i++) {
-    // 计算出 要赋值的元素在a中的下标位置
     int32_t idx = GetAndIncrementIndex(indices, shape, strides, n_dim);
     out->ptr[offset + idx] = a.ptr[i];
   }
@@ -424,7 +420,6 @@ void MatmulTiled(const AlignedArray& a, const AlignedArray& b, AlignedArray* out
   for (size_t i = 0; i < m_tile; i++)
     for (size_t j = 0; j < p_tile; j++)
       for (size_t k = 0; k < n_tile; k++) {
-        // 拿到目标 TILE * TILE 的那一块
         scalar_t* a_tile = a.ptr + (i * n_tile + k) * TILE * TILE;
         scalar_t* b_tile = b.ptr + (k * p_tile + j) * TILE * TILE;
         scalar_t* out_tile = out->ptr + (i * p_tile + j) * TILE * TILE;
