@@ -123,6 +123,11 @@ class FastConv2d(Conv):
 
         fft_out = ops.complex_multiply(x, kernel, device=x.device)        
         
+        # Sum over input channels to get (batch, out_channels, height, width, 2)
+        # fft_out has shape (batch, out_channels, in_channels, height, width, 2)
+        # Need to sum over the in_channels dimension (axis=2)
+        fft_out = ops.summation(fft_out, axes=(2,))  # Now shape is (batch, out_channels, height, width, 2)
+        
         # Inverse FFT to get back to spatial domain
         ifft_out = ops.ifft(fft_out, shape=(P, Q), device=x.device, dtype=x.dtype)
 
