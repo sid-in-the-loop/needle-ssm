@@ -51,6 +51,7 @@ class S4Layer(Module):
         state_size: int = 64,
         *,
         dropout: float = 0.0,
+        use_fft: bool = False,
         device=None,
         dtype: str = "float32",
     ):
@@ -61,6 +62,7 @@ class S4Layer(Module):
         self.state_size = state_size
         self.device = device
         self.dtype = dtype
+        self.use_fft = use_fft
 
         lambda_init, b_init = hippo_legs_init(
             state_size,
@@ -154,6 +156,9 @@ class S4Layer(Module):
             axes=2,
         )
 
+        if self.use_fft:
+            # FFT-based causal convolution path (keeps same semantics as backend)
+            return ops.causal_conv1d_fft(u, kernel)
         return causal_conv(u, kernel)
 
     def forward(self, x: Tensor) -> Tensor:
@@ -197,6 +202,7 @@ class S4(Module):
         *,
         state_size: int = 64,
         dropout: float = 0.0,
+        use_fft: bool = False,
         device=None,
         dtype: str = "float32",
         batch_first: bool = True,
@@ -211,6 +217,7 @@ class S4(Module):
         self.sequence_len = sequence_len
         self.device = device
         self.dtype = dtype
+        self.use_fft = use_fft
 
         self.embedding = Embedding(
             sequence_len,
@@ -226,6 +233,7 @@ class S4(Module):
                     hidden_size=hidden_size,
                     state_size=state_size,
                     dropout=dropout,
+                    use_fft=use_fft,
                     device=device,
                     dtype=dtype,
                 )

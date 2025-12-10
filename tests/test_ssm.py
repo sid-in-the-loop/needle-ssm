@@ -8,6 +8,7 @@ from pathlib import Path
 
 import needle as ndl
 import needle.nn as nn
+from needle import ops
 from needle.nn.nn_ssm import hippo_legs_init
 
 import torch
@@ -250,6 +251,88 @@ def test_s4_ssm_forward():
     # Check output is finite
     assert np.all(np.isfinite(np_out))
 
+
+def test_causal_conv_fft_parity():
+    """FFT causal conv matches direct backend within tolerance."""
+    np.random.seed(0)
+    batch, seq_len, channels = 2, 7, 3
+    device = ndl.cpu()
+    if not hasattr(device, "causal_conv"):
+        pytest.skip("causal_conv backend not available on cpu device")
+
+    u = ndl.Tensor(np.random.randn(batch, seq_len, channels).astype(np.float32), device=device)
+    k = ndl.Tensor(np.random.randn(seq_len, channels).astype(np.float32), device=device)
+
+    direct = ops.causal_conv_backend(u, k, batch, seq_len, channels).numpy()
+    fft_out = ops.causal_conv1d_fft(u, k).numpy()
+
+    np.testing.assert_allclose(fft_out, direct, rtol=1e-5, atol=1e-6)
+
+
+def test_s4_fft_flag_forward_and_backward():
+    """S4 with use_fft runs forward and backward without errors."""
+    np.random.seed(0)
+    batch, seq_len, dim = 2, 8, 4
+    device = ndl.cpu()
+    if not hasattr(device, "causal_conv"):
+        pytest.skip("causal_conv backend not available on cpu device")
+
+    x = ndl.Tensor(np.random.randn(batch, seq_len, dim).astype(np.float32), device=device)
+    model = nn.S4(
+        embedding_size=dim,
+        hidden_size=8,
+        num_layers=1,
+        state_size=4,
+        dropout=0.0,
+        device=device,
+        batch_first=True,
+        sequence_len=seq_len,
+        use_fft=True,
+    )
+
+    y, _ = model(x)
+    loss = y.sum()
+    loss.backward()
+
+    np_result = y.numpy()
+    assert np_result.shape == (batch, seq_len, dim)
+    assert np.all(np.isfinite(np_result))
+
+
+def test_s4_fft_vs_direct_tolerance():
+    """Outputs match (within tolerance) between FFT and direct causal conv paths."""
+    np.random.seed(1)
+    batch, seq_len, dim = 2, 10, 6
+    device = ndl.cpu()
+    if not hasattr(device, "causal_conv"):
+        pytest.skip("causal_conv backend not available on cpu device")
+
+    # Create a base layer and clone parameters to ensure identical weights
+    base_layer = nn.S4Layer(
+        q_features=dim,
+        hidden_size=16,
+        state_size=8,
+        dropout=0.0,
+        device=device,
+    )
+    fft_layer = nn.S4Layer(
+        q_features=dim,
+        hidden_size=16,
+        state_size=8,
+        dropout=0.0,
+        device=device,
+        use_fft=True,
+    )
+    # Copy parameters
+    for bp, fp in zip(base_layer.parameters(), fft_layer.parameters()):
+        fp.data = bp.data
+
+    x = ndl.Tensor(np.random.randn(batch, seq_len, dim).astype(np.float32), device=device)
+
+    out_direct = base_layer(x).numpy()
+    out_fft = fft_layer(x).numpy()
+
+    np.testing.assert_allclose(out_fft, out_direct, rtol=1e-4, atol=1e-4)
 
 
 # -------------------------

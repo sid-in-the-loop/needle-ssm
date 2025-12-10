@@ -298,11 +298,8 @@ class Scan(TensorOp):
         grad_reversed = flip(out_grad, axes=(self.axis,))
         grad_scanned = grad_reversed.scan(axis=self.axis)
         return flip(grad_scanned, axes=(self.axis,))
-
-
 def scan(a, axis=0):
     return Scan(axis)(a)
-
 
 class CausalConv(TensorOp):
     """

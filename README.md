@@ -30,6 +30,10 @@ source venv/bin/activate
 pip install --upgrade pip
 pip install -r requirements.txt
 
+# optional: S4Torch reference (if you need torch-based comparisons)
+# (requires torch already installed; disable build isolation so pip is available)
+pip install --no-build-isolation git+https://github.com/TariqAHassan/S4Torch.git
+
 # build the C++ / CUDA backends
 make clean
 make lib
@@ -70,7 +74,7 @@ Notes:
 - Later runs compare current outputs against those reference files.
 - Tests cover:
   - HiPPO-style initialization
-  - Discretization
+  - Discretizationin 
   - The core SSM step
   - `S4Layer` forward
   - `S4` model forward
