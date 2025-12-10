@@ -601,6 +601,192 @@ def crop(x: Tensor, h_cropping: int, w_cropping: int, shape: Optional[tuple] = N
     """
     return Crop(h_cropping, w_cropping, shape)(x)
 
+
+class Pad1D(TensorOp):
+    """
+    Padding operation for 3D tensors with sequence dimension.
+    
+    Adds zeros around the sequence dimension (time axis) of input tensors.
+    This is commonly used to:
+    - Prepare sequences for FFT-based operations (power-of-2 sizes)
+    - Avoid circular convolution artifacts
+    - Implement border handling in sequence processing
+    
+    Input: A tensor of shape (batch_size, seq_len, channels)
+           - batch_size: number of samples
+           - seq_len: sequence length
+           - channels: number of features per timestep
+           
+    Output: A tensor of shape (batch_size, seq_len+pad_left+pad_right, channels)
+            - Padded with zeros on both sides of sequence dimension
+    
+    Args:
+        pad_left: Amount of padding to add at the beginning of sequence.
+        pad_right: Amount of padding to add at the end of sequence.
+    """
+    def __init__(self, pad_left: int, pad_right: int):
+        """
+        Initialize padding operation for sequence dimension.
+        
+        Args:
+            pad_left: Padding amount at sequence start.
+            pad_right: Padding amount at sequence end.
+        """
+        self.pad_left = pad_left
+        self.pad_right = pad_right
+        super().__init__()
+
+    def compute(self, x: NDArray) -> NDArray:
+        """
+        Forward pass: Apply zero-padding to sequence dimension.
+        
+        Args:
+            x: Input array of shape (batch_size, seq_len, channels).
+        
+        Returns:
+            Padded array of shape (batch_size, seq_len+pad_left+pad_right, channels).
+        """
+        # Define padding specification for each dimension
+        # Format: ((before_dim0, after_dim0), (before_dim1, after_dim1), ...)
+        # No padding on batch (axis 0) and channel (axis 2) dimensions
+        # Padding on sequence (axis 1)
+        pad_width = (
+            (0, 0),                           # No padding for batch dimension
+            (self.pad_left, self.pad_right),  # Padding for sequence dimension
+            (0, 0),                           # No padding for channel dimension
+        )
+        padded_x = x.pad(pad_width)
+        return padded_x
+
+    def gradient(self, out_grad: Tensor, node: Tensor):
+        """
+        Backward pass: Gradient of padding is cropping.
+        
+        When gradients flow back through padding, we remove the padded regions
+        to match the original input shape.
+        
+        Args:
+            out_grad: Gradient from subsequent operations (includes padded regions).
+            node: Computation graph node.
+        
+        Returns:
+            Gradient cropped to original input size.
+        """
+        # Get original sequence length from input
+        original_seq_len = node.inputs[0].shape[1]
+        return crop1d(out_grad, self.pad_left, original_seq_len)
+
+def pad1d(x: Tensor, pad_left: int, pad_right: int) -> Tensor:
+    """
+    Convenience function to apply 1D padding to a tensor.
+    
+    Args:
+        x: Input tensor of shape (batch, seq_len, channels).
+        pad_left: Padding amount at sequence start.
+        pad_right: Padding amount at sequence end.
+    
+    Returns:
+        Zero-padded tensor with increased sequence length.
+    """
+    return Pad1D(pad_left, pad_right)(x)
+
+
+class Crop1D(TensorOp):
+    """
+    Cropping operation for 3D tensors with sequence dimension.
+    
+    Removes elements from the borders of sequence dimension. This is the inverse
+    operation of padding and is used to:
+    - Extract subsequences from sequences
+    - Remove padding after FFT-based convolution
+    - Implement gradient flow through padding operations
+    
+    Input: A tensor of shape (batch_size, seq_len, channels)
+           - batch_size: number of samples
+           - seq_len: sequence length before cropping
+           - channels: number of features
+           
+    Output: A tensor of shape (batch_size, crop_len, channels)
+            - crop_len: length of extracted subsequence
+            - Region extracted starting at start_idx
+    
+    Args:
+        start_idx: Index to start cropping from.
+        crop_len: Length of the output sequence to extract.
+    """
+    def __init__(self, start_idx: int, crop_len: int):
+        """
+        Initialize cropping operation for sequence dimension.
+        
+        Args:
+            start_idx: Starting index for cropped region.
+            crop_len: Length of the output sequence to extract.
+        """
+        self.start_idx = start_idx
+        self.crop_len = crop_len
+        super().__init__()
+
+    def compute(self, x: NDArray) -> NDArray:
+        """
+        Forward pass: Extract a subsequence from the sequence dimension.
+        
+        Args:
+            x: Input array of shape (batch_size, seq_len, channels, ...).
+        
+        Returns:
+            Cropped array of shape (batch_size, crop_len, channels, ...).
+        """
+        # Calculate the boundaries of the region to extract
+        start = self.start_idx
+        end = self.start_idx + self.crop_len
+        
+        # Extract the region using array slicing
+        # Build a slice tuple for any number of dimensions
+        # Keep all dimensions except crop dimension 1 (sequence)
+        ndim = len(x.shape)
+        slice_tuple = tuple([slice(None), slice(start, end)] + [slice(None)] * (ndim - 2))
+        cropped_x = x[slice_tuple]
+        return cropped_x
+
+    def gradient(self, out_grad: Tensor, node: Tensor):
+        """
+        Backward pass: Gradient of cropping is padding with zeros.
+        
+        When gradients flow back through cropping, we pad the gradient to restore
+        the original sequence length. Regions that were cropped away receive
+        zero gradient.
+        
+        Args:
+            out_grad: Gradient from subsequent operations (cropped size).
+            node: Computation graph node containing input information.
+        
+        Returns:
+            Gradient padded to match original input size, with zeros in cropped regions.
+        """
+        # Calculate padding needed to restore original dimensions
+        # Pad at the start by the cropping offset
+        pad_left = self.start_idx
+        # Pad at the end to reach original length
+        original_seq_len = node.inputs[0].shape[1]
+        pad_right = original_seq_len - (self.start_idx + self.crop_len)
+        return pad1d(out_grad, pad_left, pad_right)
+
+
+def crop1d(x: Tensor, start_idx: int, crop_len: int) -> Tensor:
+    """
+    Convenience function to apply 1D cropping to a tensor.
+    
+    Args:
+        x: Input tensor of shape (batch, seq_len, channels).
+        start_idx: Starting index for extraction.
+        crop_len: Length of the sequence to extract.
+    
+    Returns:
+        Cropped tensor with specified subsequence.
+    """
+    return Crop1D(start_idx, crop_len)(x)
+
+
 class ComplexMultiply(TensorOp):
     """
     Complex multiplication of two tensors representing complex numbers.
@@ -612,13 +798,11 @@ class ComplexMultiply(TensorOp):
     Complex multiplication formula: (a + bi)(c + di) = (ac - bd) + (ad + bc)i
     
     Input: Two complex tensors with last dimension encoding [real, imaginary]:
-           - x: shape (batch, cout, cin, height, width, 2) - input features
-           - kernel: shape (batch, cout, cin, height, width, 2) - filter weights
-           Both must have matching dimensions except potentially batch/channel dims.
+           - a: shape (..., 2) - first complex tensor
+           - b: shape (..., 2) - second complex tensor
+           Both must have compatible shapes for broadcasting.
            
-    Output: Complex tensor of shape (batch, cout, height, width, 2)
-            - Result of complex multiplication summed over cin dimension
-            - Implements frequency-domain filtering/convolution
+    Output: Complex tensor of same shape with element-wise complex product
     
     Args:
         device: Device to place the output tensor on.
@@ -633,40 +817,38 @@ class ComplexMultiply(TensorOp):
         super().__init__()
         self.device = device
 
-    def compute(self, x: NDArray, kernel: NDArray) -> NDArray:
+    def compute(self, a: NDArray, b: NDArray) -> NDArray:
         """
         Forward pass: Perform complex multiplication element-wise.
         
         Implements: (a + bi) * (c + di) = (ac - bd) + (ad + bc)i
         
         Args:
-            x: Input complex array of shape (batch, cout, cin, height, width, 2).
-            kernel: Kernel complex array of shape (batch, cout, cin, height, width, 2).
+            a: First complex array with last dimension [real, imaginary].
+            b: Second complex array with last dimension [real, imaginary].
         
         Returns:
-            Complex product of shape (batch, cout, height, width, 2) after
-            summing over the cin (input channel) dimension.
+            Complex product with same shape.
         """
-        batch_size, cout, cin, height, width, cmplx = x.shape
-        assert cmplx == 2, "Last dimension must be 2 (real/imag pairs)"
-
+        # Build slicing tuple dynamically based on number of dimensions
+        # Last dimension is always [real, imag]
+        ndim = len(a.shape)
+        real_slice = tuple([slice(None)] * (ndim - 1) + [0])
+        imag_slice = tuple([slice(None)] * (ndim - 1) + [1])
+        
         # Extract real and imaginary components from both inputs
-        # Shape of each component: (batch, cout, cin, height, width)
-        x_real = x[:, :, :, :, :, 0]
-        x_imag = x[:, :, :, :, :, 1]
-        k_real = kernel[:, :, :, :, :, 0]
-        k_imag = kernel[:, :, :, :, :, 1]
+        # Broadcast shapes if needed - one input might have batch dim 1
+        a_real = a[real_slice]
+        a_imag = a[imag_slice]
+        b_real = b[real_slice]
+        b_imag = b[imag_slice]
         
         # Apply complex multiplication formula
         # Real part: ac - bd (product of reals minus product of imaginaries)
         # Imaginary part: ad + bc (cross terms)
-        result = array_api.empty((batch_size, cout, cin, height, width, 2), device=self.device)
-        result[:, :, :, :, :, 0] = x_real * k_real - x_imag * k_imag
-        result[:, :, :, :, :, 1] = x_real * k_imag + x_imag * k_real
-
-        # Sum over input channels (axis 2) to get final output
-        # This combines contributions from all input channels
-        result = result.sum(axis=2)
+        result = array_api.empty(a.shape, device=self.device)
+        result[real_slice] = a_real * b_real - a_imag * b_imag
+        result[imag_slice] = a_real * b_imag + a_imag * b_real
 
         return result
 
@@ -674,65 +856,29 @@ class ComplexMultiply(TensorOp):
         """
         Backward pass: Compute gradients for complex multiplication.
         
-        For complex multiplication z = x * kernel:
-        - ∂L/∂x = ∂L/∂z * conj(kernel)
-        - ∂L/∂kernel = ∂L/∂z * conj(x)
+        For complex multiplication z = a * b:
+        - ∂L/∂a = ∂L/∂z * conj(b)
+        - ∂L/∂b = ∂L/∂z * conj(a)
         
         Where conj() is complex conjugate (negate imaginary part).
         
         Args:
-            out_grad: Gradient from subsequent operations, shape (batch, cout, height, width, 2).
-            node: Computation graph node with inputs x and kernel.
+            out_grad: Gradient from subsequent operations.
+            node: Computation graph node with inputs a and b.
         
         Returns:
-            Tuple of (grad_x, grad_kernel) with shapes matching inputs.
+            Tuple of (grad_a, grad_b) with shapes matching inputs.
         """
         # Extract inputs from computation graph
-        x, kernel = node.inputs
+        a, b = node.inputs
         
-        # Convert tensors to numpy for complex arithmetic
-        # out_grad shape: (batch, cout, height, width, 2)
-        out_r = out_grad[:, :, :, :, 0].compact().numpy()
-        out_i = out_grad[:, :, :, :, 1].compact().numpy()
-
-        # x shape: (batch, cout, cin, height, width, 2)
-        x_r = x[:, :, :, :, :, 0].compact().numpy()
-        x_i = x[:, :, :, :, :, 1].compact().numpy()
-        
-        # kernel shape: (batch, cout, cin, height, width, 2)
-        k_r = kernel[:, :, :, :, :, 0].compact().numpy()
-        k_i = kernel[:, :, :, :, :, 1].compact().numpy()
-
-        # Reconstruct complex representations for gradient computation
-        out_complex = out_r + 1j * out_i  # (batch, cout, height, width)
-        x_complex = x_r + 1j * x_i        # (batch, cout, cin, height, width)
-        k_complex = k_r + 1j * k_i        # (batch, cout, cin, height, width)
-
         # Compute gradients using complex conjugate multiplication
-        # Add broadcast dimension for cin when multiplying with out_grad
-        grad_x_complex = out_complex[:, :, None, :, :] * np.conjugate(k_complex)
-        grad_k_complex = out_complex[:, :, None, :, :] * np.conjugate(x_complex)
+        # grad_a = out_grad * conj(b)
+        # grad_b = out_grad * conj(a)
+        grad_a = complex_multiply(out_grad, conjugate(b, device=self.device), device=self.device)
+        grad_b = complex_multiply(out_grad, conjugate(a, device=self.device), device=self.device)
 
-        # Allocate output arrays for gradients
-        grad_x = array_api.empty(x.shape, device=self.device)
-        grad_k = array_api.empty(kernel.shape, device=self.device)
-
-        # Separate real and imaginary parts and convert back to framework arrays
-        grad_x[:, :, :, :, :, 0] = array_api.array(
-            grad_x_complex.real.astype(np.float32), device=self.device
-        )
-        grad_x[:, :, :, :, :, 1] = array_api.array(
-            grad_x_complex.imag.astype(np.float32), device=self.device
-        )
-
-        grad_k[:, :, :, :, :, 0] = array_api.array(
-            grad_k_complex.real.astype(np.float32), device=self.device
-        )
-        grad_k[:, :, :, :, :, 1] = array_api.array(
-            grad_k_complex.imag.astype(np.float32), device=self.device
-        )
-
-        return grad_x, grad_k
+        return grad_a, grad_b
 
 
 def complex_multiply(a: Tensor, b: Tensor, device=None) -> Tensor:
@@ -748,6 +894,85 @@ def complex_multiply(a: Tensor, b: Tensor, device=None) -> Tensor:
         Element-wise complex product.
     """
     return ComplexMultiply(device)(a, b)
+
+class Conjugate(TensorOp):
+    """
+    Complex conjugation of a tensor representing complex numbers.
+    
+    Negates the imaginary part of the complex tensor. This operation is often
+    used in frequency-domain computations, such as in convolution theorems
+    and gradient calculations.
+    
+    Input: Complex tensor with last dimension encoding [real, imaginary].
+    
+    Output: Complex tensor of same shape with imaginary part negated.
+    
+    Args:
+        device: Device to place the output tensor on.
+    """
+    def __init__(self, device=None):
+        """
+        Initialize complex conjugation operation.
+        
+        Args:
+            device: Computation device (CPU/CUDA).
+        """
+        super().__init__()
+        self.device = device
+
+    def compute(self, x: NDArray) -> NDArray:
+        """
+        Forward pass: Compute complex conjugate.
+        
+        Args:
+            x: Input complex array with last dimension [real, imaginary].
+        
+        Returns:
+            Complex conjugate array with imaginary part negated.
+        """
+        # Build slicing tuple dynamically based on number of dimensions
+        # Last dimension is always [real, imag], so we access it with [:, ..., 0] and [:, ..., 1]
+        ndim = len(x.shape)
+        real_slice = tuple([slice(None)] * (ndim - 1) + [0])
+        imag_slice = tuple([slice(None)] * (ndim - 1) + [1])
+        
+        real = x[real_slice]
+        imag = x[imag_slice]
+        
+        conj_imag = -imag
+        result = array_api.empty(x.shape, device=self.device)
+        result[real_slice] = real
+        result[imag_slice] = conj_imag
+        return result
+
+    def gradient(self, out_grad: Tensor, node: Tensor):
+        """
+        Backward pass: Gradient of conjugation is conjugation.
+        
+        The derivative of the conjugate operation is itself. Thus, the gradient
+        flowing back through this operation is also conjugated.
+        
+        Args:
+            out_grad: Gradient from subsequent operations.
+            node: Computation graph node.
+        
+        Returns:
+            Conjugated gradient.
+        """
+        return conjugate(out_grad, device=self.device)
+
+def conjugate(x: Tensor, device=None) -> Tensor:
+    """
+    Convenience function to compute complex conjugate of a tensor.
+    
+    Args:
+        x: Input complex tensor with last dimension [real, imaginary].
+        device: Device for computation.
+    
+    Returns:
+        Complex conjugate tensor.
+    """
+    return Conjugate(device)(x)
 
 
 class CausalConv1DFFT(TensorOp):
@@ -808,7 +1033,8 @@ class CausalConv1DFFT(TensorOp):
             Causal convolution output of shape (batch, seq_len, channels).
         """
         batch, seq_len, channels = u.shape
-        k_len = kernel_rev.shape[0]
+        k_len, _ = kernel_rev.shape
+
         assert kernel_rev.shape[1] == channels
 
         # Determine FFT length: needs to be at least seq_len + k_len - 1
@@ -819,14 +1045,14 @@ class CausalConv1DFFT(TensorOp):
 
         # Pad signal and kernel along time axis to FFT length
         # This prevents circular wraparound effects in frequency domain multiplication
-        u_pad = np.pad(u.numpy(), ((0, 0), (0, fft_len - seq_len), (0, 0)))
-        k_pad = np.pad(kernel_rev.numpy(), ((0, fft_len - k_len), (0, 0)))
+        u_padded = u.pad(((0, 0), (0, fft_len - seq_len), (0, 0)))
+        k_padded = kernel_rev.pad(((0, fft_len - k_len), (0, 0)))
 
         # Transform to frequency domain
         # FFT along time axis=1, preserving batch and channel dimensions
-        u_f = np.fft.rfft(u_pad, n=fft_len, axis=1)          # (batch, n_freq, channels)
-        k_f = np.fft.rfft(k_pad, n=fft_len, axis=0)          # (n_freq, channels)
-        k_f = k_f[None, :, :]                                # (1, n_freq, channels) - add batch dim
+        u_f = np.fft.rfft(u_padded.numpy(), n=fft_len, axis=1)          # (batch, n_freq, channels)
+        k_f = np.fft.rfft(k_padded.numpy(), n=fft_len, axis=0)          # (n_freq, channels)
+        k_f = k_f[None, :, :]                                           # (1, n_freq, channels) - add batch dim
 
         # Frequency domain multiplication = time domain convolution
         y_f = u_f * k_f                                      # broadcast over batch dimension
@@ -859,52 +1085,39 @@ class CausalConv1DFFT(TensorOp):
         # Extract inputs from computation graph
         u, kernel_rev = node.inputs
         batch, seq_len, channels = u.shape
-        k_len = kernel_rev.shape[0]
+        k_len, _ = kernel_rev.shape
+
         fft_len = self.fft_len or (seq_len + k_len - 1)
 
         device = self.device or u.device
 
         # Pad all arrays to FFT length for proper gradient computation
-        grad_np = np.pad(
-            out_grad.numpy(), ((0, 0), (0, fft_len - seq_len), (0, 0))
-        )
-        u_np = np.pad(u.numpy(), ((0, 0), (0, fft_len - seq_len), (0, 0)))
-        k_np = np.pad(kernel_rev.numpy(), ((0, fft_len - k_len), (0, 0)))
+        # Convert to Tensors and use pad1d operation
+        grad_padded = pad1d(out_grad, 0, fft_len - seq_len)
+        u_padded = pad1d(u, 0, fft_len - seq_len)
+        kernel_rev = reshape(kernel_rev, (1, k_len, channels))
+        k_padded = pad1d(kernel_rev, 0, fft_len - k_len)
 
         # Transform all arrays to frequency domain
-        G = np.fft.rfft(grad_np, n=fft_len, axis=1)      # (batch, n_freq, ch) - output gradient
-        U = np.fft.rfft(u_np, n=fft_len, axis=1)         # (batch, n_freq, ch) - input signal
-        K = np.fft.rfft(k_np, n=fft_len, axis=0)         # (n_freq, ch) - kernel
-        K = K[None, :, :]                                # (1, n_freq, ch) - add batch dimension
+        G = fft1d(grad_padded, n=fft_len, device=device)      # (batch, n_freq, ch, 2) - output gradient
+        U = fft1d(u_padded, n=fft_len, device=device)         # (batch, n_freq, ch, 2) - input signal
+        K = fft1d(k_padded, n=fft_len, device=device)         # (1, n_freq, ch, 2) - kernel
+        K = broadcast_to(K, (batch, K.shape[1], K.shape[2], 2))  # Broadcast over batch
 
         # Compute gradients in frequency domain using conjugate multiplication
         # Gradient w.r.t. input: output_grad * conj(kernel)
-        grad_u_full = np.fft.irfft(G * np.conjugate(K), n=fft_len, axis=1)
+        grad_u_freq = complex_multiply(G, conjugate(K, device=device), device=device)
         # Gradient w.r.t. kernel: output_grad * conj(input)
-        grad_k_full = np.fft.irfft(G * np.conjugate(U), n=fft_len, axis=1)
+        grad_k_freq = complex_multiply(G, conjugate(U, device=device), device=device)
+        
+        grad_u_full = ifft1d(grad_u_freq, n=fft_len, device=device, dtype=self.dtype)
+        grad_k_full = ifft1d(grad_k_freq, n=fft_len, device=device, dtype=self.dtype)
 
         # Extract valid portions and aggregate kernel gradient across batch
-        grad_u = grad_u_full[:, :seq_len, :]              # Keep only original sequence length
-        grad_k = grad_k_full[:, :k_len, :].sum(axis=0)    # Sum over batch, keep only kernel length
+        grad_u = crop1d(grad_u_full, 0, seq_len)               # Keep only original sequence length
+        grad_k = summation(crop1d(grad_k_full, 0, k_len), axes=(0,))  # Sum over batch, keep only kernel length
 
-        # Import Tensor locally to avoid circular dependencies
-        from ..autograd import Tensor
-
-        # Wrap gradients as Tensor objects with proper metadata
-        grad_u_tensor = Tensor(
-            grad_u.astype(np.float32),
-            device=device,
-            dtype=self.dtype,
-            requires_grad=u.requires_grad,
-        )
-        grad_k_tensor = Tensor(
-            grad_k.astype(np.float32),
-            device=device,
-            dtype=self.dtype,
-            requires_grad=kernel_rev.requires_grad,
-        )
-
-        return grad_u_tensor, grad_k_tensor
+        return grad_u, grad_k
 
 
 def causal_conv1d_fft(u: Tensor, kernel_rev: Tensor, fft_len: Optional[int] = None) -> Tensor:
