@@ -178,7 +178,7 @@ if __name__ == "__main__":
 
     device = ndl.cuda() if ndl.cuda().enabled() else ndl.cpu()
 
-    # print("Training RNN classifier")
+    print("Training RNN classifier")
     rnn_model = RNNClassifierLM(vocab_size=args.vocab, embedding_size=args.emb, hidden_size=args.hidden, device=device)
     train_model(rnn_model, train_ds, val_ds, n_epochs=args.epochs, batch_size=args.batch, optimizer_cls=ndl.optim.Adam, device=device)
 
