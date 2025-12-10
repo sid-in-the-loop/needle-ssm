@@ -1034,14 +1034,11 @@ class CausalConv1DFFT(TensorOp):
         """
         batch, seq_len, channels = u.shape
         k_len, _ = kernel_rev.shape
-
         assert kernel_rev.shape[1] == channels
 
         # Determine FFT length: needs to be at least seq_len + k_len - 1
         # to avoid circular convolution (aliasing) artifacts
         fft_len = self.fft_len or (seq_len + k_len - 1)
-
-        device = self.device or u.device
 
         # Pad signal and kernel along time axis to FFT length
         # This prevents circular wraparound effects in frequency domain multiplication
@@ -1052,7 +1049,7 @@ class CausalConv1DFFT(TensorOp):
         # FFT along time axis=1, preserving batch and channel dimensions
         u_f = np.fft.rfft(u_padded.numpy(), n=fft_len, axis=1)          # (batch, n_freq, channels)
         k_f = np.fft.rfft(k_padded.numpy(), n=fft_len, axis=0)          # (n_freq, channels)
-        k_f = k_f[None, :, :]                                           # (1, n_freq, channels) - add batch dim
+        k_f = k_f.reshape(1, k_f.shape[0], k_f.shape[1])                                           # (1, n_freq, channels) - add batch dim
 
         # Frequency domain multiplication = time domain convolution
         y_f = u_f * k_f                                      # broadcast over batch dimension
@@ -1063,7 +1060,7 @@ class CausalConv1DFFT(TensorOp):
         # Extract only the first seq_len outputs (causal portion)
         # Discard the extra outputs from padding
         y = y[:, :seq_len, :]
-        return array_api.array(y.astype(np.float32), device=device)
+        return array_api.array(y.astype(np.float32), device=self.device)
 
     def gradient(self, out_grad: Tensor, node: Tensor):
         """

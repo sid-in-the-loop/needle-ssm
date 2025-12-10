@@ -16,8 +16,9 @@ References:
 """
 
 from typing import Optional
+import math
 
-import numpy as np
+from needle import backend_ndarray as nd
 
 from needle.autograd import Tensor
 from needle import ops
@@ -87,14 +88,11 @@ def hippo_legs_init(
     """
     # HiPPO-LegS initialization: eigenvalues are -(i+1) for i in [0, state_size)
     # These negative eigenvalues ensure stable dynamics (states decay over time)
-    diag = np.array([-(i + 1) for i in range(state_size)], dtype=np.float32)
+    diag = nd.NDArray([-(i + 1) for i in range(state_size)], device=device)
     
     # B vector scales with sqrt(2i+1) to maintain proper normalization
     # with Legendre polynomial basis functions
-    b = np.array(
-        [np.sqrt(2 * i + 1) for i in range(state_size)],
-        dtype=np.float32,
-    )
+    b = nd.NDArray([math.sqrt(2 * i + 1) for i in range(state_size)], device=device)
     
     # Return as trainable parameters - the model will learn adjustments
     # to these theoretically-motivated initializations
@@ -469,14 +467,13 @@ class S4(Module):
         
         # ==== Add Positional Embeddings ====
         # Create position indices [0, 1, 2, ..., seq_len-1] for each batch
-        timestamps = np.arange(seq_len)
-        timestamps = np.broadcast_to(timestamps, (batch, seq_len))
         timestamps = Tensor(
-            timestamps,
+            [i for i in range(seq_len)],
             device=x.device,
             dtype=x.dtype,
             requires_grad=False,
         )
+        timestamps = ops.broadcast_to(timestamps, (batch, seq_len))
         # Look up positional embeddings and add to input
         time_emb = self.embedding(timestamps)
         x = x + time_emb
